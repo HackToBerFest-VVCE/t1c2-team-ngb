@@ -434,7 +434,7 @@ export function Risk() {
           {/* Prioritized Vulnerabilities Table */}
           <Card
             title="Highest priority records"
-            subtitle="Sorted by local priority score with source CVSS displayed side-by-side"
+            subtitle="Sorted by local priority score (80% CVSS + 20% Recency) with deterministic tie-breaking by newest publication timestamp"
           >
             <div className="table-wrap">
               <table>
@@ -465,7 +465,14 @@ export function Risk() {
                         <span className="mono-score">{v.cvss_score?.toFixed(1) ?? '—'}</span>
                       </td>
                       <td>
-                        <div className="priority-bar-cell">
+                        <div
+                          className="priority-bar-cell"
+                          title={
+                            v.priority_score != null
+                              ? `Score: ${v.priority_score.toFixed(1)} / 100 (CVSS: ${v.cvss_score?.toFixed(1) ?? '—'} · Published: ${v.published ? new Date(v.published).toUTCString() : '—'})`
+                              : undefined
+                          }
+                        >
                           <strong className="priority">
                             {v.priority_score != null ? v.priority_score.toFixed(1) : '—'}
                           </strong>
@@ -476,7 +483,30 @@ export function Risk() {
                           )}
                         </div>
                       </td>
-                      <td>{v.published ? new Date(v.published).toLocaleDateString() : '—'}</td>
+                      <td title={v.published ? `Full UTC Timestamp: ${v.published}` : undefined}>
+                        {v.published ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            <span style={{ fontSize: '0.82rem', fontWeight: 500 }}>
+                              {new Date(v.published).toLocaleDateString(undefined, {
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric',
+                                timeZone: 'UTC',
+                              })}
+                            </span>
+                            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted, #94a3b8)' }}>
+                              {new Date(v.published).toLocaleTimeString(undefined, {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                timeZone: 'UTC',
+                              })}{' '}
+                              UTC
+                            </span>
+                          </div>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
                       <td style={{ textAlign: 'right' }}>
                         <a
                           className="icon-button"

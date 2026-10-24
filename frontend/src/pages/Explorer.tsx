@@ -261,10 +261,29 @@ export default function Explorer() {
                           {v.priority_score != null ? v.priority_score.toFixed(1) : '—'}
                         </span>
                       </td>
-                      <td className="date-cell">
-                        {v.published
-                          ? new Date(v.published).toLocaleDateString()
-                          : '—'}
+                      <td className="date-cell" title={v.published ? `Full UTC Timestamp: ${v.published}` : undefined}>
+                        {v.published ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            <span style={{ fontSize: '0.82rem', fontWeight: 500 }}>
+                              {new Date(v.published).toLocaleDateString(undefined, {
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric',
+                                timeZone: 'UTC',
+                              })}
+                            </span>
+                            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted, #94a3b8)' }}>
+                              {new Date(v.published).toLocaleTimeString(undefined, {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                timeZone: 'UTC',
+                              })}{' '}
+                              UTC
+                            </span>
+                          </div>
+                        ) : (
+                          '—'
+                        )}
                       </td>
                       <td style={{ textAlign: 'right' }}>
                         <button
