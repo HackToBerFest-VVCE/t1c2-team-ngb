@@ -77,7 +77,7 @@ The provider reads a fixed set of canonical CVE columns and bounds results using
 
 ## Optional generative analysis
 
-Put newly rotated NVIDIA NIM tokens in the backend-only variables (`NVIDIA_API_KEY`, `KIMI_API_KEY`, and/or `DEEPSEEK_API_KEY`) in `.env`, then restart Flask. The ML Insights page can select Nemotron, Kimi, or DeepSeek when its matching key is configured, and runs analysis only when **Analyze patterns** is clicked. That action sends summary metrics, up to eight recent public CVE examples, and up to five ML anomaly candidates to NVIDIA NIM. Do not put keys in frontend variables, source control, screenshots, or logs. See [docs/methodology.md](docs/methodology.md) for scope and limitations.
+Put each provider's own API key in its matching backend-only variable (`NVIDIA_API_KEY`, `KIMI_API_KEY`, or `DEEPSEEK_API_KEY`) in `.env`, then restart Flask. The ML Insights page can select Nemotron, Kimi, or DeepSeek when its matching key is configured, and runs analysis only when **Analyze patterns** is clicked. The action sends summary metrics, up to eight recent public CVE examples, and up to five ML anomaly candidates to the selected provider's endpoint. Do not put keys in frontend variables, source control, screenshots, or logs. See [docs/methodology.md](docs/methodology.md) for scope and limitations.
 
 ## API
 

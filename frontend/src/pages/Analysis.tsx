@@ -824,12 +824,12 @@ function AIInsightPanel() {
         </Badge>
       </div>
       <p className="limitation-footer">
-        This action sends summary statistics, up to eight public CVE examples, and ML outlier IDs to the configured NVIDIA NIM model. The API key stays on the backend.
+        This action sends summary statistics, up to eight public CVE examples, and ML outlier IDs to the selected provider. The API key stays on the backend.
       </p>
       {!selectedModel?.configured && (
         <div className="notice">
           <Info size={16} />
-          <div><b>Configure server-side AI access</b><span>Set rotated NVIDIA_API_KEY, KIMI_API_KEY, and/or DEEPSEEK_API_KEY values in the backend environment, then restart Flask. Choose any configured model above.</span></div>
+          <div><b>Configure server-side AI access</b><span>Set the matching NVIDIA_API_KEY, KIMI_API_KEY, or DEEPSEEK_API_KEY from that provider in the backend environment, then restart Flask. Choose any configured model above.</span></div>
         </div>
       )}
       {error && <div className="notice" role="alert"><AlertTriangle size={16} /><div><b>Analysis unavailable</b><span>{error}</span></div></div>}

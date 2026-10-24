@@ -9,11 +9,15 @@ from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 
-NIM_ENDPOINT = "https://integrate.api.nvidia.com/v1/chat/completions"
+ENDPOINTS = {
+    "nvidia": "https://integrate.api.nvidia.com/v1/chat/completions",
+    "kimi": "https://api.moonshot.ai/v1/chat/completions",
+    "deepseek": "https://api.deepseek.com/chat/completions",
+}
 MODELS = {
     "nvidia": ("NVIDIA_API_KEY", "nvidia/nemotron-3.5-lightning-30b-a3b"),
-    "kimi": ("KIMI_API_KEY", "moonshotai/kimi-k2.5"),
-    "deepseek": ("DEEPSEEK_API_KEY", "deepseek-ai/deepseek-v4-flash"),
+    "kimi": ("KIMI_API_KEY", "kimi-k2.5"),
+    "deepseek": ("DEEPSEEK_API_KEY", "deepseek-flash"),
 }
 
 
@@ -25,20 +29,22 @@ class AIServiceError(RuntimeError):
         self.status_code = status_code
 
 
-def _provider_error(status: int) -> AIServiceError:
+def _provider_error(status: int, provider: str) -> AIServiceError:
     """Return a useful, sanitized message without exposing provider bodies."""
+    provider_name = {"nvidia": "NVIDIA NIM", "kimi": "Moonshot Kimi", "deepseek": "DeepSeek"}.get(provider, "AI provider")
+    key_name = MODELS.get(provider, MODELS["nvidia"])[0]
     messages = {
-        400: ("ai_request_rejected", "NVIDIA rejected the analysis request. Try a shorter analysis window."),
-        401: ("ai_authentication_failed", "NVIDIA rejected the API key. Check or rotate NVIDIA_API_KEY, then restart Flask."),
-        402: ("ai_credits_required", "NVIDIA requires available API credits for this request. Check your NVIDIA API account."),
-        403: ("ai_model_access_denied", "NVIDIA denied access to this model. Check model availability and account access."),
-        404: ("ai_model_unavailable", "The configured NVIDIA model endpoint was not found. Update the model selection."),
-        422: ("ai_request_rejected", "NVIDIA rejected the model request. The provider may have changed its accepted parameters."),
-        429: ("ai_rate_limited", "NVIDIA rate or usage limits were reached. Wait briefly or check your account limits."),
+        400: ("ai_request_rejected", f"{provider_name} rejected the analysis request. Try a shorter analysis window."),
+        401: ("ai_authentication_failed", f"{provider_name} rejected the API key. Check or rotate {key_name} in the backend environment."),
+        402: ("ai_credits_required", f"{provider_name} requires available API credits. Check the account for {key_name}."),
+        403: ("ai_model_access_denied", f"{provider_name} denied access to this model. Check model availability and account access."),
+        404: ("ai_model_unavailable", f"The configured {provider_name} model endpoint was not found. Update the model selection."),
+        422: ("ai_request_rejected", f"{provider_name} rejected the model request parameters."),
+        429: ("ai_rate_limited", f"{provider_name} rate or usage limits were reached. Wait briefly or check the account."),
     }
     code, message = messages.get(
         status,
-        ("ai_unavailable", "NVIDIA could not complete the analysis right now. Please retry shortly."),
+        ("ai_unavailable", f"{provider_name} could not complete the analysis right now. Please retry shortly."),
     )
     return AIServiceError(code, message, 503 if status in (401, 402, 403, 429) else 502)
 
@@ -50,16 +56,18 @@ def _read_json(response) -> dict:
     return json.loads(raw)
 
 
-def _resolve_completion(response, api_key: str) -> dict:
-    """Read a synchronous response or poll NVIDIA's documented 202 result."""
+def _resolve_completion(response, api_key: str, provider: str) -> dict:
+    """Read a response, polling NVIDIA NIM if it returns a pending request."""
     result = _read_json(response)
     if response.status != 202:
         return result
+    if provider != "nvidia":
+        raise ValueError("unexpected pending response from synchronous provider")
     request_id = result.get("requestId") or result.get("request_id")
     if not isinstance(request_id, str) or not request_id or len(request_id) > 64:
         raise ValueError("provider omitted pending request id")
 
-    status_url = f"{NIM_ENDPOINT.rsplit('/chat/completions', 1)[0]}/status/{quote(request_id, safe='')}"
+    status_url = f"{ENDPOINTS[provider].rsplit('/chat/completions', 1)[0]}/status/{quote(request_id, safe='')}"
     deadline = time.monotonic() + 35
     while time.monotonic() < deadline:
         time.sleep(1)
@@ -77,7 +85,7 @@ def _resolve_completion(response, api_key: str) -> dict:
         except HTTPError as exc:
             if exc.code == 202:
                 continue
-            raise _provider_error(exc.code) from None
+            raise _provider_error(exc.code, provider) from None
     raise AIServiceError(
         "ai_generation_timeout",
         "NVIDIA accepted the request but did not finish before the wait limit. Please retry.",
@@ -96,7 +104,7 @@ def configuration(provider: str | None = None) -> dict:
         "configured": bool(api_key),
         "provider": selected,
         "model": default_model,
-        "endpoint": NIM_ENDPOINT,
+        "endpoint": ENDPOINTS[selected],
         "api_key": api_key,
         "key_name": key_name,
     }
@@ -152,11 +160,8 @@ def analyze(days: int, summary: dict, source: dict, anomalies: list, records, pr
     payload = _clean_payload(days, summary, source, anomalies, records)
     body = {
         "model": cfg["model"],
-        "temperature": 0.2,
-        "top_p": 0.95,
         "max_tokens": 1800,
         "stream": False,
-        "chat_template_kwargs": {"enable_thinking": False},
         "messages": [
             {
                 "role": "system",
@@ -177,8 +182,14 @@ def analyze(days: int, summary: dict, source: dict, anomalies: list, records, pr
             },
         ],
     }
+    if cfg["provider"] == "nvidia":
+        body.update(temperature=0.2, chat_template_kwargs={"enable_thinking": False})
+    elif cfg["provider"] == "kimi":
+        body.update(temperature=0.6, top_p=0.95, thinking={"type": "disabled"})
+    else:
+        body.update(temperature=0.2, thinking={"type": "disabled"})
     request = Request(
-        NIM_ENDPOINT,
+        cfg["endpoint"],
         data=json.dumps(body).encode("utf-8"),
         headers={
             "Authorization": f"Bearer {cfg['api_key']}",
@@ -189,10 +200,10 @@ def analyze(days: int, summary: dict, source: dict, anomalies: list, records, pr
     )
     try:
         with urlopen(request, timeout=45) as response:
-            result = _resolve_completion(response, cfg["api_key"])
+            result = _resolve_completion(response, cfg["api_key"], cfg["provider"])
     except HTTPError as exc:
         # Never log or return provider response bodies, which may contain data.
-        raise _provider_error(exc.code) from None
+        raise _provider_error(exc.code, cfg["provider"]) from None
     except AIServiceError:
         raise
     except (URLError, TimeoutError, OSError, json.JSONDecodeError, ValueError):
