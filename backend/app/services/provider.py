@@ -97,7 +97,6 @@ class SnowflakeProvider:
             for k in (
                 "SNOWFLAKE_ACCOUNT",
                 "SNOWFLAKE_USER",
-                "SNOWFLAKE_PASSWORD",
                 "SNOWFLAKE_WAREHOUSE",
                 "SNOWFLAKE_DATABASE",
                 "SNOWFLAKE_SCHEMA",
@@ -105,10 +104,16 @@ class SnowflakeProvider:
             )
         }
         missing = [k for k, v in required.items() if not v]
+        password = os.getenv("SNOWFLAKE_PASSWORD", "").strip()
+        private_key = os.getenv("SNOWFLAKE_PRIVATE_KEY_PATH", "").strip()
+        if not password and not private_key:
+            missing.append("SNOWFLAKE_PASSWORD or SNOWFLAKE_PRIVATE_KEY_PATH")
         if missing:
             raise ProviderError("Snowflake configuration is incomplete")
         if not TABLE_RE.fullmatch(required["SNOWFLAKE_TABLE"]):
             raise ProviderError("Invalid Snowflake table identifier")
+        required["SNOWFLAKE_PASSWORD"] = password
+        required["SNOWFLAKE_PRIVATE_KEY_PATH"] = private_key
         return required  # type: ignore[return-value]
 
     def _connection(self):
@@ -116,10 +121,9 @@ class SnowflakeProvider:
             import snowflake.connector
 
             c = self._config()
-            return snowflake.connector.connect(
+            connection = dict(
                 account=c["SNOWFLAKE_ACCOUNT"],
                 user=c["SNOWFLAKE_USER"],
-                password=c["SNOWFLAKE_PASSWORD"],
                 warehouse=c["SNOWFLAKE_WAREHOUSE"],
                 database=c["SNOWFLAKE_DATABASE"],
                 schema=c["SNOWFLAKE_SCHEMA"],
@@ -127,6 +131,17 @@ class SnowflakeProvider:
                 login_timeout=10,
                 network_timeout=20,
             )
+            if c["SNOWFLAKE_PRIVATE_KEY_PATH"]:
+                connection.update(
+                    authenticator="SNOWFLAKE_JWT",
+                    private_key_file=c["SNOWFLAKE_PRIVATE_KEY_PATH"],
+                )
+                passphrase = os.getenv("SNOWFLAKE_PRIVATE_KEY_PASSPHRASE", "")
+                if passphrase:
+                    connection["private_key_file_pwd"] = passphrase
+            else:
+                connection["password"] = c["SNOWFLAKE_PASSWORD"]
+            return snowflake.connector.connect(**connection)
         except ProviderError:
             raise
         except Exception as exc:

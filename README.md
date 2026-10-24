@@ -2,7 +2,7 @@
 
 **From Open Cyber Data to Explainable Intelligence**
 
-ThreatLens AI is an evidence-linked vulnerability analysis dashboard built with React, Flask, pandas, scikit-learn, optional generative analysis through NVIDIA NIM, and an optional Snowflake provider. Its local default is visibly labeled DEMO. The starter NVD snapshot is small; use the included feed importer to grow it or load official annual NVD feeds into a configured Snowflake table.
+ThreatLens AI is an evidence-linked vulnerability analysis dashboard built with React, Flask, pandas, scikit-learn, optional generative analysis through NVIDIA NIM, and a Snowflake data provider. Its local default is visibly labeled DEMO. Configure the provider to read a compatible live Snowflake Marketplace table/view; see [snowflake/setup.md](snowflake/setup.md).
 
 ## Current implementation status
 
@@ -12,7 +12,7 @@ ThreatLens AI is an evidence-linked vulnerability analysis dashboard built with 
 - Rolling trend horizons with month buckets, explicit date boundaries, zero-activity months, and stale-request protection when changing the selector.
 - Optional, click-to-run generative analysis that cites supplied CVE IDs and distinguishes source fields from unsupervised signals.
 - NVD 2.0 annual-feed import for a local DEMO copy or configured Snowflake target.
-- Optional Snowflake connector/provider and canonical schema/transform examples.
+- Snowflake connector/provider with password or key-pair authentication, plus bounded read-only access to a configured table or compatibility view.
 - **Live Snowflake access and a hackathon-qualifying Snowflake dataset are unverified** because no account access or credentials were available. The project is not ready for a submission claiming a live Snowflake dataset.
 - CoCo was unavailable; actual use is not claimed. See `docs/coco-workflow.md`.
 
@@ -69,11 +69,11 @@ python -m backend.app.data.train_models
 
 The import reads `hitoshura25/cvefixes` (Apache-2.0), `vinitvek/cybersecurityattacks` (Unlicense), and `pyToshka/network-intrusion-detection` (BSD-3-Clause) from Hugging Face. CVEfixes can require a large download. Imported data and trained model files are local, ignored by Git, and not bundled. The trainer keeps tasks separate, uses deterministic held-out evaluation, groups CVE code examples by CVE during splitting, and reports limitations at `GET /api/ml/training` and in the ML Insights page. The small honeypot dataset may not contain enough balanced labels to train a model; in that case the report explains why it was skipped. Dataset licenses, provenance, and labels should be reviewed before downstream use.
 
-After configuring the canonical table and Snowflake service credentials, load those same NVD feeds into Snowflake with `python -m backend.app.data.nvd_sync --start-year 2002 --target snowflake`. This is an NVD-origin dataset stored in Snowflake, not a Snowflake Marketplace dataset. Current workspace Snowflake credentials are not configured, so this path is implemented but not executed or verified.
+For the live Snowflake dataset, configure `DATA_SOURCE=snowflake` and point `SNOWFLAKE_TABLE` at a table or compatibility view exposing the canonical CVE columns. Snowflake-backed dashboard aggregates, clustering, and anomaly analysis use that active source. Hugging Face supervised models remain a separate training path and are trained from the selected HF datasets by `train_models`; a Snowflake marketplace table is not silently mixed into those training sets. The optional `nvd_sync --target snowflake` command loads NVD-origin records into a writable Snowflake table; it is not a Marketplace dataset. No account credentials or Marketplace dataset identity are available in this workspace, so a live source has not yet been connected or verified.
 
 ## Snowflake and CoCo
 
-The optional provider reads a fixed set of canonical columns and bounds results using `SNOWFLAKE_MAX_ROWS` (500,000 default, 1,000,000 maximum). Credentials remain backend-side in environment variables. A real CoCo usage log is pending an accessible Snowflake account; suggested prompts are labeled as future prompts in `docs/coco-workflow.md`.
+The provider reads a fixed set of canonical CVE columns and bounds results using `SNOWFLAKE_MAX_ROWS` (500,000 default, 1,000,000 maximum). Credentials remain backend-side; key-pair authentication is supported. A real CoCo usage log is pending an accessible Snowflake account; suggested prompts are labeled as future prompts in `docs/coco-workflow.md`.
 
 ## Optional generative analysis
 

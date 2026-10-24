@@ -1,20 +1,47 @@
-# Snowflake setup and current verification status
+# Connect a Snowflake cybersecurity dataset
 
-## Account inspection
+ThreatLens can read a live Snowflake table or view. The repository does not include Snowflake account credentials, and no Marketplace dataset has been installed or verified here. Select and install the dataset in your Snowflake account first; do not use `SNOWFLAKE_SAMPLE_DATA` TPC-H/TPC-DS as threat intelligence.
 
-At initial implementation, the workspace had no Snowflake credentials or connector, no connected Snowflake/CoCo tool, and no Snowflake account access was provided. Thus no sample database, Marketplace listing, target table, or live connection could be inspected. **A qualifying Snowflake dataset is not yet verified or accessible in this project.** Do not use TPC-H/TPC-DS sample data as vulnerability intelligence; Snowflake documents these as decision-support benchmarks, not cyber datasets.
+## Dataset shape
 
-Snowflake documents `SNOWFLAKE_SAMPLE_DATA` as a shared sample database with TPC-H and TPC-DS. Marketplace listings require account inspection, which has not happened. The app defaults to bundled NVD DEMO mode until a real qualifying table is configured and verified.
+The current dashboard is vulnerability-centric. Its Snowflake source expects these canonical columns: `CVE_ID`, `DESCRIPTION`, `PUBLISHED`, `LAST_MODIFIED`, `CVSS_SCORE`, `SEVERITY`, `CWE`, `AFFECTED_PRODUCTS`, and `SOURCE_URL`. Point `SNOWFLAKE_TABLE` at a compatible table, or create a view over the shared Marketplace table that aliases its fields to this schema. Keep the Marketplace table read-only; the application only runs a bounded `SELECT`.
 
-## Configure a table
+Example view pattern (replace the placeholders with columns verified in your installed dataset):
 
-1. Review the current hackathon rules for data-source eligibility and obtain account access.
-2. Find/verify an eligible vulnerability source in the account. Document its provider, listing/table name, license, access method, and eligibility evidence in `docs/dataset.md`.
-3. Create a writable target database/schema/table using `schema.sql` (adjust the database/schema qualification).
-4. Create the canonical table with `schema.sql`, then (once backend Snowflake credentials and write permissions are configured) run `python -m backend.app.data.nvd_sync --start-year 2002 --target snowflake` to download and upsert official annual NVD CVE 2.0 feeds. This is an NVD dataset loaded into Snowflake, not a Snowflake Marketplace dataset. Confirm hackathon eligibility before making a qualifying-source claim. The script processes years sequentially and may take time/warehouse resources.
-5. Set the Snowflake environment variables from `.env.example`; set `DATA_SOURCE=snowflake`.
-6. Start the API and request `/api/health`, `/api/data-sources`, `/api/data-quality`. LIVE is shown only after the connector can query the configured table.
+```sql
+CREATE OR REPLACE VIEW THREATLENS.CVE_SOURCE AS
+SELECT
+  <source_cve_id> AS CVE_ID,
+  <source_description> AS DESCRIPTION,
+  <source_published_timestamp> AS PUBLISHED,
+  <source_modified_timestamp> AS LAST_MODIFIED,
+  <source_cvss_score> AS CVSS_SCORE,
+  <source_severity> AS SEVERITY,
+  <source_cwe> AS CWE,
+  <source_affected_products> AS AFFECTED_PRODUCTS,
+  <source_advisory_url> AS SOURCE_URL
+FROM <marketplace_database>.<marketplace_schema>.<marketplace_table>;
+```
 
-Snowflake sample shared databases are read-only and query execution requires a running warehouse; copying into a writable target incurs normal warehouse usage. Limit the role to required table access. Never add credentials to source control.
+If your dataset contains network events or incident logs rather than CVE records, it does not fit this CVE view. Record its schema and intended analysis first; it needs an event-specific ingestion/analytics path instead of being relabeled as CVEs.
 
-The provider uses a fixed set of canonical columns and bounds reads using `SNOWFLAKE_MAX_ROWS` (default 500,000; maximum 1,000,000). `SNOWFLAKE_TABLE` is validated as a SQL identifier before interpolation; row-limit values are bound and no user SQL is accepted. The ML pipeline deterministically caps its model sample at 5,000 rows while aggregate counts use the complete active provider result.
+## Configure credentials
+
+Copy `.env.example` to `.env`, then set `DATA_SOURCE=snowflake` and the following backend-only values:
+
+- `SNOWFLAKE_ACCOUNT`, `SNOWFLAKE_USER`, `SNOWFLAKE_WAREHOUSE`
+- `SNOWFLAKE_DATABASE`, `SNOWFLAKE_SCHEMA`, `SNOWFLAKE_TABLE`
+- Either `SNOWFLAKE_PRIVATE_KEY_PATH` (preferred) with optional `SNOWFLAKE_PRIVATE_KEY_PASSPHRASE`, or `SNOWFLAKE_PASSWORD`
+- Optional `SNOWFLAKE_ROLE`; `SNOWFLAKE_MAX_ROWS` defaults to 500,000 and cannot exceed 1,000,000
+
+For key-pair authentication, register the corresponding public key on a dedicated Snowflake service user and store the private PKCS#8 key outside Git. The connector uses Snowflake JWT authentication. Never commit the private key or passphrase, and do not send credentials in chat or screenshots. The password option remains for accounts where it is appropriate.
+
+Restart Flask, then check `GET /api/health` and `GET /api/data-sources`. The source reports `LIVE` only after it successfully reads the configured table/view. A green result confirms connectivity and schema compatibility; it does not establish Marketplace eligibility. Keep the listing name, provider, license, share/table name, and any competition eligibility evidence in `docs/dataset.md`.
+
+## NVD alternative
+
+The included `python -m backend.app.data.nvd_sync --start-year 2002 --target snowflake` command loads official NVD feeds into a writable canonical table. This is NVD-origin data stored in Snowflake, not a Snowflake Marketplace dataset. It is useful for development but must not be presented as the Marketplace source.
+
+## Current verification
+
+The Python connector path and setup are implemented, including direct read-only table/view access and optional key-pair authentication. No live connection, Marketplace listing, dataset schema, or account-specific training run has been verified because account access and the dataset identity are not present in this workspace.
