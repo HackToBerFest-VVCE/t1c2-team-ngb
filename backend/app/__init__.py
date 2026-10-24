@@ -160,22 +160,25 @@ def create_app(test_config=None):
         }), 500
 
     # ── Warm up data cache in background ──────────────────────────────
-    import threading
+    # Serverless functions should load data on demand: detached threads may
+    # be frozen after a response and compete with request memory.
+    if not os.environ.get("VERCEL"):
+        import threading
 
-    def _warmup():
-        """Pre-load the NVD dataset so the first request is fast."""
-        try:
-            from .services.provider import get_records
-            from .analytics.core import add_priority
-            app.logger.info("⏳ Warming up data cache (background)…")
-            frame = get_records()
-            add_priority(frame, copy=False)
-            app.logger.info("✅ Data cache warm — %d records ready", len(frame))
-        except Exception:
-            app.logger.warning("⚠ Background warm-up failed; first request will be slower")
+        def _warmup():
+            """Pre-load the NVD dataset so the first request is fast."""
+            try:
+                from .services.provider import get_records
+                from .analytics.core import add_priority
+                app.logger.info("⏳ Warming up data cache (background)…")
+                frame = get_records()
+                add_priority(frame, copy=False)
+                app.logger.info("✅ Data cache warm — %d records ready", len(frame))
+            except Exception:
+                app.logger.warning("⚠ Background warm-up failed; first request will be slower")
 
     # Only warm up in the main process, not in the Werkzeug reloader child
-    if not app.debug or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
-        threading.Thread(target=_warmup, daemon=True).start()
+        if not app.debug or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+            threading.Thread(target=_warmup, daemon=True).start()
 
     return app
