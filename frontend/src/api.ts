@@ -97,6 +97,13 @@ export interface AIInsights {
   source: { mode: string; dataset: string; record_count: number };
   window_days: number;
   record_count: number;
+  cve_selection?: {
+    window_records: number;
+    window_high_critical: number;
+    included_high_critical: number;
+    included_context: number;
+    policy: string;
+  };
   generated_at: string;
   cited_cves: string[];
   notice: string;

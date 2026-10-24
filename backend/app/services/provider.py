@@ -9,6 +9,7 @@ The application clearly labels output as LIVE or DEMO.
 import json
 import os
 import re
+import time
 from pathlib import Path
 
 import pandas as pd
@@ -20,6 +21,10 @@ _DEMO_CACHE: tuple[int, int, pd.DataFrame] | None = None
 TABLE_RE = re.compile(
     r"^[A-Za-z_][A-Za-z0-9_$]*(\.[A-Za-z_][A-Za-z0-9_$]*){0,2}$"
 )
+
+# ── Process-level cache for fully normalised records ──────────────────
+_RECORDS_CACHE: tuple[float, int, int, pd.DataFrame] | None = None
+_RECORDS_TTL = 60  # seconds
 
 
 class ProviderError(RuntimeError):
@@ -46,11 +51,11 @@ class DemoProvider:
         try:
             stat = data_path.stat()
             if _DEMO_CACHE and _DEMO_CACHE[:2] == (stat.st_mtime_ns, stat.st_size):
-                return _DEMO_CACHE[2].copy()
+                return _DEMO_CACHE[2]
             raw = json.loads(data_path.read_text(encoding="utf-8-sig"))
             frame = pd.DataFrame(raw)
             _DEMO_CACHE = (stat.st_mtime_ns, stat.st_size, frame)
-            return frame.copy()
+            return frame
         except Exception as exc:
             raise ProviderError("Demo data could not be read") from exc
 
@@ -224,7 +229,31 @@ def get_provider():
 
 
 def get_records() -> pd.DataFrame:
-    """Fetch, normalise, and clean records from the active provider."""
+    """Fetch, normalise, and clean records from the active provider.
+
+    Results are cached for up to ``_RECORDS_TTL`` seconds so that rapid
+    successive API calls (dashboard page loads) don't re-parse the full
+    268 MB JSON each time.
+    """
+    global _RECORDS_CACHE
+
+    # Determine current data-file identity for cache validation
+    data_path = FULL_CATALOG_DATA if FULL_CATALOG_DATA.exists() else SNAPSHOT_DATA
+    try:
+        stat = data_path.stat()
+        file_mtime, file_size = stat.st_mtime_ns, stat.st_size
+    except OSError:
+        file_mtime, file_size = 0, 0
+
+    now = time.time()
+    if (
+        _RECORDS_CACHE is not None
+        and (now - _RECORDS_CACHE[0]) < _RECORDS_TTL
+        and _RECORDS_CACHE[1] == file_mtime
+        and _RECORDS_CACHE[2] == file_size
+    ):
+        return _RECORDS_CACHE[3]
+
     frame = get_provider().records()
 
     # Ensure all expected columns exist
@@ -256,4 +285,5 @@ def get_records() -> pd.DataFrame:
         rejected = _rejected_mask(frame)
         frame = frame.loc[~rejected].copy()
 
+    _RECORDS_CACHE = (now, file_mtime, file_size, frame)
     return frame

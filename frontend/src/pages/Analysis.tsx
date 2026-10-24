@@ -587,7 +587,7 @@ export function ML() {
                 ))
             )}
           </div>
-          <div className="notice">
+          <div className="notice blue-notice">
             <Info size={17} />
             <div><b>Training scope</b><span>{training.notice} Models are local artifacts and are not committed to the repository.</span></div>
           </div>
@@ -608,7 +608,7 @@ export function ML() {
         </div>
       ) : (
         <>
-          <div className="notice">
+          <div className="notice blue-notice">
             <Info size={17} />
             <div>
               <b>Unsupervised Signal Notice (No Ground Truth)</b>
@@ -824,7 +824,7 @@ function AIInsightPanel() {
         </Badge>
       </div>
       <p className="limitation-footer">
-        This action sends summary statistics, up to eight public CVE examples, and ML outlier IDs to the selected provider. The API key stays on the backend.
+        This action sends full-window summary statistics, up to 80 Critical/High CVEs (severity or CVSS ≥ 7), up to 20 comparison CVEs, and ML outlier IDs to the selected provider. The API key stays on the backend.
       </p>
       {!selectedModel?.configured && (
         <div className="notice">
@@ -839,6 +839,7 @@ function AIInsightPanel() {
             <div className="banner-icon"><Sparkles size={17} /></div>
             <div><b>{result.source.dataset} · {result.source.mode} · {result.record_count.toLocaleString()} records</b><span>{result.window_days}-day window · {result.model} · generated {new Date(result.generated_at).toLocaleString()}</span></div>
           </div>
+          {result.cve_selection && <p className="limitation-footer" style={{ marginTop: 0 }}>AI input: {result.cve_selection.included_high_critical} of {result.cve_selection.window_high_critical} Critical/High CVEs in the window, plus {result.cve_selection.included_context} comparison CVEs. Summary statistics cover all {result.cve_selection.window_records.toLocaleString()} distinct CVEs in the window.</p>}
           <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>{result.analysis}</div>
           <p className="limitation-footer" style={{ marginTop: 16 }}>{result.notice}</p>
           {result.cited_cves.length > 0 && <div className="term-cloud">{result.cited_cves.map(id => <a key={id} className="text-action" href={`https://nvd.nist.gov/vuln/detail/${encodeURIComponent(id)}`} target="_blank" rel="noreferrer">{id} <ExternalLink size={12} /></a>)}</div>}

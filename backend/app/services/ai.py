@@ -4,6 +4,7 @@ import json
 import os
 import time
 from datetime import datetime, timezone
+import pandas as pd
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
@@ -118,7 +119,7 @@ def provider_options() -> list[dict]:
     ]
 
 
-def _clean_payload(days: int, summary: dict, source: dict, anomalies: list, records) -> dict:
+def _clean_payload(days: int, summary: dict, source: dict, anomalies: list, records, cve_selection: dict | None = None) -> dict:
     """Keep external prompts small and limited to public, relevant facts."""
     examples = []
     if records is not None:
@@ -145,19 +146,57 @@ def _clean_payload(days: int, summary: dict, source: dict, anomalies: list, reco
         "window_days": days,
         "source": source,
         "summary": summary,
+        "cve_selection": cve_selection or {},
         "recent_cve_examples": examples,
         "ml_anomaly_candidates": anomaly_examples,
     }
 
 
-def analyze(days: int, summary: dict, source: dict, anomalies: list, records, provider: str | None = None) -> dict:
+def select_cve_examples(frame, severe_limit: int = 80, context_limit: int = 20):
+    """Prioritize Critical/High CVEs while retaining a small severity comparison set."""
+    if frame is None or frame.empty:
+        return frame, {
+            "window_records": 0,
+            "window_high_critical": 0,
+            "included_high_critical": 0,
+            "included_context": 0,
+            "policy": "Up to 80 Critical/High CVEs by CVSS and recency, plus up to 20 recent lower-severity examples.",
+        }
+
+    records = frame.sort_values("published", ascending=False, na_position="last").drop_duplicates(
+        subset=["cve_id"], keep="first"
+    )
+    severity = records["severity"].fillna("").astype(str).str.upper()
+    score = records["cvss_score"]
+    severe_mask = severity.isin({"CRITICAL", "HIGH"}) | score.ge(7).fillna(False)
+    severe = records.loc[severe_mask].sort_values(
+        ["cvss_score", "published"], ascending=[False, False], na_position="last"
+    ).head(severe_limit)
+    context = records.loc[~severe_mask].copy()
+    severity_rank = {"MEDIUM": 0, "LOW": 1, "NONE": 2, "UNKNOWN": 3}
+    context["_severity_rank"] = context["severity"].fillna("").astype(str).str.upper().map(severity_rank).fillna(4)
+    context = context.sort_values(
+        ["_severity_rank", "published"], ascending=[True, False], na_position="last"
+    ).head(context_limit).drop(columns="_severity_rank")
+    selected = pd.concat([severe, context]).drop_duplicates(subset=["cve_id"])
+    selection = {
+        "window_records": int(len(records)),
+        "window_high_critical": int(severe_mask.sum()),
+        "included_high_critical": int(len(severe)),
+        "included_context": int(len(context)),
+        "policy": "Up to 80 Critical/High CVEs by CVSS and recency, plus up to 20 recent lower-severity examples.",
+    }
+    return selected, selection
+
+
+def analyze(days: int, summary: dict, source: dict, anomalies: list, records, provider: str | None = None, cve_selection: dict | None = None) -> dict:
     cfg = configuration(provider)
     if not cfg["configured"]:
         raise AIServiceError(
             "ai_not_configured",
             f"Add a rotated token to {cfg['key_name']} in the backend environment, then restart Flask.",
         )
-    payload = _clean_payload(days, summary, source, anomalies, records)
+    payload = _clean_payload(days, summary, source, anomalies, records, cve_selection)
     body = {
         "model": cfg["model"],
         "max_tokens": 1800,
@@ -172,6 +211,9 @@ def analyze(days: int, summary: dict, source: dict, anomalies: list, records, pr
                     "defensive follow-up. Cite CVE IDs only when supplied. Do not claim exploitation, "
                     "attack activity, or causality without supplied evidence. Distinguish source facts, "
                     "statistical ML signals, and your interpretations. If the sample is too small, say so. "
+                    "Prioritize the supplied Critical and High severity CVEs and the highest CVSS scores. "
+                    "The payload includes full-window severity counts but only a bounded, prioritized CVE sample; "
+                    "do not imply that the example list is the entire window or infer prevalence from that sample. "
                     "Use concise headings and bullet points."
                 ),
             },
@@ -222,6 +264,7 @@ def analyze(days: int, summary: dict, source: dict, anomalies: list, records, pr
         "source": source,
         "window_days": days,
         "record_count": int(summary.get("total", 0)),
+        "cve_selection": cve_selection or {},
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "cited_cves": sorted({x["cve_id"] for x in payload["recent_cve_examples"] if x["cve_id"]}),
         "notice": "AI-generated interpretation of the supplied public dataset; verify recommendations against source advisories. It is not an exploitation verdict.",

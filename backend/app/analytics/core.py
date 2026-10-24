@@ -72,12 +72,41 @@ def priority(row) -> float | None:
 
 
 def add_priority(frame: pd.DataFrame) -> pd.DataFrame:
-    """Attach the local priority_score column to the frame."""
+    """Attach the local priority_score column to the frame (vectorised)."""
     result = frame.copy()
     if result.empty:
         result["priority_score"] = pd.Series(dtype=float)
-    else:
-        result["priority_score"] = result.apply(priority, axis=1)
+        return result
+
+    # Vectorised computation — avoids row-by-row apply() on large frames
+    now = pd.Timestamp.now(tz="UTC")
+    has_cvss = result["cvss_score"].notna()
+    has_pub = result["published"].notna()
+
+    age_days = np.where(
+        has_pub,
+        (now - result["published"]).dt.total_seconds() / 86400,
+        np.nan,
+    )
+    recency = np.clip(1 - age_days / 365, 0, 1)
+
+    cvss = result["cvss_score"].to_numpy(dtype=float, na_value=np.nan)
+
+    # Full formula: 100 * (0.8 * cvss/10 + 0.2 * recency)
+    score = np.where(
+        has_cvss & has_pub,
+        (cvss / 10 * 0.8 + recency * 0.2) * 100,
+        np.where(
+            has_cvss & ~has_pub,
+            cvss * 8,
+            np.where(
+                ~has_cvss & has_pub,
+                recency * 20,
+                np.nan,
+            ),
+        ),
+    )
+    result["priority_score"] = np.round(score, 1)
     return result
 
 

@@ -2,8 +2,9 @@
 import logging
 import os
 import time
+from pathlib import Path
 
-from flask import Flask, g, jsonify, request as flask_request
+from flask import Flask, abort, g, jsonify, request as flask_request, send_from_directory
 from flask_cors import CORS
 
 from .routes.api import api
@@ -14,7 +15,8 @@ __version__ = "1.0.0"
 
 def create_app(test_config=None):
     """Create and configure the Flask application."""
-    app = Flask(__name__)
+    frontend_dist = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+    app = Flask(__name__, static_folder=None)
     app.config.from_mapping(
         JSON_SORT_KEYS=False,
         MAX_CONTENT_LENGTH=2 * 1024 * 1024,
@@ -68,13 +70,37 @@ def create_app(test_config=None):
             response.status_code,
             duration,
         )
-        # Prevent caching of API responses by default
+        # Allow short browser caching for GET API responses (data refreshes
+        # every 60s server-side anyway). POST / mutating requests stay no-store.
         if flask_request.path.startswith("/api/"):
-            response.headers.setdefault("Cache-Control", "no-store")
+            if flask_request.method == "GET":
+                response.headers.setdefault(
+                    "Cache-Control", "public, max-age=30"
+                )
+            else:
+                response.headers.setdefault("Cache-Control", "no-store")
         return response
 
     # ── Blueprints ────────────────────────────────────────────────────
     app.register_blueprint(api, url_prefix="/api")
+
+    # In the Render Docker deployment, serve the built SPA and API from one
+    # origin. Local Vite development continues to use its /api proxy.
+    if (frontend_dist / "index.html").is_file():
+        @app.get("/")
+        def frontend_index():
+            return send_from_directory(frontend_dist, "index.html")
+
+        @app.get("/<path:frontend_path>")
+        def frontend_assets(frontend_path):
+            if frontend_path == "api" or frontend_path.startswith("api/"):
+                abort(404)
+            candidate = frontend_dist / frontend_path
+            if candidate.is_file():
+                return send_from_directory(frontend_dist, frontend_path)
+            if Path(frontend_path).suffix:
+                abort(404)
+            return send_from_directory(frontend_dist, "index.html")
 
     # ── Error handlers ────────────────────────────────────────────────
     @app.errorhandler(ProviderError)
@@ -132,5 +158,24 @@ def create_app(test_config=None):
                 "message": "An unexpected error occurred.",
             }
         }), 500
+
+    # ── Warm up data cache in background ──────────────────────────────
+    import threading
+
+    def _warmup():
+        """Pre-load the NVD dataset so the first request is fast."""
+        try:
+            from .services.provider import get_records
+            from .analytics.core import add_priority
+            app.logger.info("⏳ Warming up data cache (background)…")
+            frame = get_records()
+            add_priority(frame)
+            app.logger.info("✅ Data cache warm — %d records ready", len(frame))
+        except Exception:
+            app.logger.warning("⚠ Background warm-up failed; first request will be slower")
+
+    # Only warm up in the main process, not in the Werkzeug reloader child
+    if not app.debug or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+        threading.Thread(target=_warmup, daemon=True).start()
 
     return app

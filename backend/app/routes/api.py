@@ -7,6 +7,7 @@ elsewhere.  No user-supplied SQL is executed.
 
 import json
 import logging
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
@@ -16,7 +17,7 @@ from flask import Blueprint, Response, jsonify, request
 from pydantic import BaseModel, Field, ValidationError
 
 from ..analytics.core import add_priority, metrics, ml_results, safe_records
-from ..services.ai import AIServiceError, MODELS, analyze, configuration, provider_options
+from ..services.ai import AIServiceError, MODELS, analyze, configuration, provider_options, select_cve_examples
 from ..services.provider import ProviderError, get_provider, get_records, mode
 
 api = Blueprint("api", __name__)
@@ -24,6 +25,9 @@ log = logging.getLogger("threatlens.api")
 ROOT = Path(__file__).resolve().parents[3]
 
 __version__ = "1.0.0"
+
+# ── Process-level cache for priority-scored records ───────────────────
+_PRIORITY_CACHE: tuple[int, pd.DataFrame] | None = None
 
 
 # ── Helpers ───────────────────────────────────────────────────────────
@@ -33,8 +37,20 @@ def _error(code: str, message: str, status: int):
 
 
 def _records():
-    """Load records from the active provider and attach priority scores."""
-    return add_priority(get_records())
+    """Load records from the active provider and attach priority scores.
+
+    Uses an identity-based cache: if get_records() returns the same
+    DataFrame object (from its own TTL cache), skip re-computing
+    priority scores.
+    """
+    global _PRIORITY_CACHE
+    raw = get_records()
+    raw_id = id(raw)
+    if _PRIORITY_CACHE is not None and _PRIORITY_CACHE[0] == raw_id:
+        return _PRIORITY_CACHE[1]
+    scored = add_priority(raw)
+    _PRIORITY_CACHE = (raw_id, scored)
+    return scored
 
 
 def _public_rows(frame: pd.DataFrame) -> list[dict]:
@@ -90,6 +106,22 @@ def data_sources():
 def get_metrics():
     """Dashboard-level aggregate metrics."""
     return jsonify(metrics(_records()))
+
+
+@api.get("/summary")
+def summary():
+    """Combined dashboard payload: metrics + recent vulnerabilities.
+
+    Replaces two separate API calls (``/metrics`` + ``/vulnerabilities``)
+    with one, cutting Overview page load time roughly in half.
+    """
+    frame = _records()
+    m = metrics(frame)
+    recent = frame.sort_values("published", ascending=False, na_position="last").head(6)
+    return jsonify({
+        "metrics": m,
+        "recent": _public_rows(recent),
+    })
 
 
 # ── Vulnerabilities ───────────────────────────────────────────────────
@@ -324,7 +356,7 @@ def ai_status():
         "model": config["model"],
         "endpoint": config["endpoint"],
         "providers": provider_options(),
-        "note": "API credentials remain server-side; prompts contain dataset aggregates and a small sample of public CVE records.",
+        "note": "API credentials remain server-side; analysis uses full-window aggregates, up to 80 Critical/High CVE examples, and up to 20 comparison examples.",
     })
 
 
@@ -349,6 +381,7 @@ def ai_insights():
         now = pd.Timestamp.now(tz="UTC")
         window = frame[(frame.published >= now - pd.Timedelta(days=days)) & (frame.published <= now)]
         summary = metrics(window)
+        ai_records, cve_selection = select_cve_examples(window)
         ml = ml_results(window)
         anomalies = ml.get("anomalies", [])
         source = get_provider().status()
@@ -357,8 +390,9 @@ def ai_insights():
             summary=summary,
             source={"mode": source["mode"], "dataset": source["dataset"], "record_count": source["record_count"]},
             anomalies=anomalies[:5],
-            records=window.sort_values("published", ascending=False).head(8),
+            records=ai_records,
             provider=selected_provider,
+            cve_selection=cve_selection,
         ))
     except AIServiceError as exc:
         return _error(exc.code, exc.public_message, exc.status_code)

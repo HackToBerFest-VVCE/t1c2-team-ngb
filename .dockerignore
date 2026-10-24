@@ -1,0 +1,14 @@
+.git
+.venv
+venv
+.env
+.env.*
+**/.env
+**/.env.*
+node_modules
+frontend/node_modules
+frontend/dist
+data/external
+data/models
+data/vulnerabilities.full.json
+data/full_catalog_metadata.json

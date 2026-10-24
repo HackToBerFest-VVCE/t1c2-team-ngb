@@ -71,13 +71,10 @@ export default function Overview({ source, onSelect }: OverviewProps) {
     setLoading(true);
     setError('');
 
-    Promise.all([
-      api<Metrics>('/metrics'),
-      api<{ items: Vulnerability[] }>('/vulnerabilities?per_page=6'),
-    ])
-      .then(([m, r]) => {
-        setMetrics(m);
-        setRecent(r.items ?? []);
+    api<{ metrics: Metrics; recent: Vulnerability[] }>('/summary')
+      .then((data) => {
+        setMetrics(data.metrics);
+        setRecent(data.recent ?? []);
       })
       .catch((err: Error) => {
         setError(err.message || 'Failed to load overview data');
