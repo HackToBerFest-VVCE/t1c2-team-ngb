@@ -449,7 +449,9 @@ def risk():
     """Prioritised record list with transparent methodology."""
     frame = _records()
     top = frame.sort_values(
-        "priority_score", ascending=False, na_position="last"
+        ["priority_score", "published", "cvss_score"],
+        ascending=[False, False, False],
+        na_position="last",
     ).head(100)
 
     return jsonify({
