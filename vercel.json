@@ -4,7 +4,7 @@
   "functions": {
     "app.py": {
       "maxDuration": 300,
-      "excludeFiles": "{.env,.env.*,**/.env,**/.env.*,**/tests/**,**/*.test.*,**/node_modules/**,**/.venv/**,data/external/**,data/vulnerabilities.full.json,data/vulnerabilities.full.json.gz}"
+      "excludeFiles": "{.env,.env.*,**/.env,**/.env.*,public/**,**/tests/**,**/*.test.*,**/node_modules/**,**/.venv/**,data/external/**,data/vulnerabilities.full.json,data/vulnerabilities.full.json.gz}"
     }
   }
 }
