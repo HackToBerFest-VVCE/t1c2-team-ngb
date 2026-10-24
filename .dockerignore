@@ -15,3 +15,5 @@ data/models/*
 !data/models/incident_event_type.joblib
 !data/models/training_report.json
 data/vulnerabilities.full.json
+data/vulnerabilities.full.json.gz
+!data/vulnerabilities.full.parquet

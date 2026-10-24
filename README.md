@@ -56,7 +56,7 @@ python -m backend.app.data.nvd_sync
 python -m backend.app.data.nvd_sync --start-year 2002
 ```
 
-The raw historical catalog is large and stays out of Git. A compressed copy of the current public NVD catalog is bundled for the hosted DEMO so it matches the full-catalog local view; refresh it by regenerating `data/vulnerabilities.full.json` and its metadata, then recompressing the JSON file. NVD records are distinct from evidence of observed attacks: CVSS severity does not mean a vulnerability was exploited.
+The raw historical catalog stays out of Git. A compact Parquet artifact of the current public NVD catalog is bundled for the hosted DEMO so it matches the full-catalog local view; refresh it from the generated `data/vulnerabilities.full.json` catalog with pandas' PyArrow Parquet support. NVD records are distinct from evidence of observed attacks: CVSS severity does not mean a vulnerability was exploited. The Render Blueprint uses the 2 GB `1c-2g` plan because loading the full catalog and ML dependencies exceeds the 512 MB Free plan limit.
 
 ### Optional Hugging Face datasets and training
 

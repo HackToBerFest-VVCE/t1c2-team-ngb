@@ -71,9 +71,9 @@ def priority(row) -> float | None:
     return round((cvss / 10 * 0.8 + recency * 0.2) * 100, 1)
 
 
-def add_priority(frame: pd.DataFrame) -> pd.DataFrame:
+def add_priority(frame: pd.DataFrame, *, copy: bool = True) -> pd.DataFrame:
     """Attach the local priority_score column to the frame (vectorised)."""
-    result = frame.copy()
+    result = frame.copy() if copy else frame
     if result.empty:
         result["priority_score"] = pd.Series(dtype=float)
         return result

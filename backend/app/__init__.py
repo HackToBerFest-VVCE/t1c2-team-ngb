@@ -169,7 +169,7 @@ def create_app(test_config=None):
             from .analytics.core import add_priority
             app.logger.info("⏳ Warming up data cache (background)…")
             frame = get_records()
-            add_priority(frame)
+            add_priority(frame, copy=False)
             app.logger.info("✅ Data cache warm — %d records ready", len(frame))
         except Exception:
             app.logger.warning("⚠ Background warm-up failed; first request will be slower")

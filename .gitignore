@@ -18,6 +18,7 @@ dist/
 data/external/
 data/models/
 data/vulnerabilities.full.json
+data/vulnerabilities.full.json.gz
 data/full_catalog_metadata.json
 
 # Bundle the public full NVD catalog and the local HF training outputs used by
@@ -28,3 +29,4 @@ data/full_catalog_metadata.json
 !data/models/incident_event_type.joblib
 !data/models/training_report.json
 !data/full_catalog_metadata.json
+!data/vulnerabilities.full.parquet

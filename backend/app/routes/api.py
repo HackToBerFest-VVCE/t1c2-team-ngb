@@ -51,7 +51,7 @@ def _records():
     raw_id = id(raw)
     if _PRIORITY_CACHE is not None and _PRIORITY_CACHE[0] == raw_id:
         return _PRIORITY_CACHE[1]
-    scored = add_priority(raw)
+    scored = add_priority(raw, copy=False)
     _PRIORITY_CACHE = (raw_id, scored)
     return scored
 

@@ -2,7 +2,7 @@ services:
   - type: web
     name: threatlens-ai
     runtime: docker
-    plan: free
+    plan: 1c-2g
     dockerfilePath: ./Dockerfile
     healthCheckPath: /api/health
     autoDeployTrigger: commit

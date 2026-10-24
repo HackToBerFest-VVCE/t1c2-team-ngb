@@ -7,7 +7,6 @@ The application clearly labels output as LIVE or DEMO.
 """
 
 import json
-import gzip
 import os
 import re
 import time
@@ -19,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[3]
 SNAPSHOT_DATA = ROOT / "data" / "vulnerabilities.json"
 FULL_CATALOG_DATA = ROOT / "data" / "vulnerabilities.full.json"
 FULL_CATALOG_GZIP = ROOT / "data" / "vulnerabilities.full.json.gz"
+FULL_CATALOG_PARQUET = ROOT / "data" / "vulnerabilities.full.parquet"
 _DEMO_CACHE: tuple[int, int, pd.DataFrame] | None = None
 TABLE_RE = re.compile(
     r"^[A-Za-z_][A-Za-z0-9_$]*(\.[A-Za-z_][A-Za-z0-9_$]*){0,2}$"
@@ -40,6 +40,8 @@ def mode() -> str:
 
 def _full_catalog_path() -> Path | None:
     """Return the full NVD catalog in raw or compressed form when available."""
+    if FULL_CATALOG_PARQUET.exists():
+        return FULL_CATALOG_PARQUET
     if FULL_CATALOG_DATA.exists():
         return FULL_CATALOG_DATA
     if FULL_CATALOG_GZIP.exists():
@@ -63,12 +65,19 @@ class DemoProvider:
             stat = data_path.stat()
             if _DEMO_CACHE and _DEMO_CACHE[:2] == (stat.st_mtime_ns, stat.st_size):
                 return _DEMO_CACHE[2]
-            if data_path.suffix == ".gz":
-                with gzip.open(data_path, "rt", encoding="utf-8-sig") as source:
-                    raw = json.load(source)
+            if data_path.suffix == ".parquet":
+                frame = pd.read_parquet(data_path, dtype_backend="pyarrow")
             else:
-                raw = json.loads(data_path.read_text(encoding="utf-8-sig"))
-            frame = pd.DataFrame(raw)
+                # Arrow-backed strings use substantially less RAM than Python
+                # objects for the full NVD catalog. Let pandas stream-decode
+                # the gzip JSON instead of materializing Python dictionaries.
+                frame = pd.read_json(
+                    data_path,
+                    orient="records",
+                    compression="gzip" if data_path.suffix == ".gz" else "infer",
+                    encoding="utf-8-sig",
+                    dtype_backend="pyarrow",
+                )
             _DEMO_CACHE = (stat.st_mtime_ns, stat.st_size, frame)
             return frame
         except Exception as exc:
@@ -227,10 +236,9 @@ def _rejected_mask(frame: pd.DataFrame) -> pd.Series:
     'Rejected reason:' (NVD-withdrawn CVE IDs)."""
     if "description" not in frame.columns:
         return pd.Series(False, index=frame.index)
-    return (
-        frame.description.fillna("").astype(str)
-        .str.match(r"^Rejected reason:", case=False)
-    )
+    return frame.description.fillna("").str.match(
+        r"^Rejected reason:", case=False
+    ).fillna(False)
 
 
 def get_provider():
@@ -290,15 +298,17 @@ def get_records() -> pd.DataFrame:
             frame["cvss_score"], errors="coerce"
         )
         frame["severity"] = (
-            frame["severity"].fillna("").astype(str)
+            frame["severity"].fillna("").astype("string[pyarrow]")
             .str.upper().replace({"": "UNKNOWN"})
         )
         frame["cve_id"] = (
-            frame["cve_id"].fillna("").astype(str).str.upper()
+            frame["cve_id"].fillna("").astype("string[pyarrow]").str.upper()
         )
         # NVD includes withdrawn CVE IDs — exclude them from all analysis
         rejected = _rejected_mask(frame)
-        frame = frame.loc[~rejected].copy()
+        # Drop withdrawn records in place so the cached raw dataframe and the
+        # normalized dataframe do not occupy memory as two full copies.
+        frame.drop(index=frame.index[rejected], inplace=True)
 
     _RECORDS_CACHE = (now, file_mtime, file_size, frame)
     return frame
