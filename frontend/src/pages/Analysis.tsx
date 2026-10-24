@@ -815,7 +815,7 @@ function AIInsightPanel() {
     try {
       const response = await api<AIInsights>('/ai/insights', {
         method: 'POST',
-        body: JSON.stringify({ days, provider }),
+        body: JSON.stringify({ days, provider, local: !selectedModel?.configured }),
       });
       setResult(response);
     } catch (err) {
@@ -861,7 +861,14 @@ function AIInsightPanel() {
       {!selectedModel?.configured && (
         <div className="notice">
           <Info size={16} />
-          <div><b>Local analysis is available</b><span>Analyze patterns runs a deterministic evidence summary from your dataset and ML results without sending data to an AI provider. To enable generated AI commentary, configure the selected provider’s API key in the backend environment.</span></div>
+          <div>
+            <b>{provider === 'nvidia' ? 'NVIDIA NIM key required' : `${provider.toUpperCase()} native key required`}</b>
+            <span>
+              {provider === 'nvidia'
+                ? 'Configure NVIDIA_API_KEY from build.nvidia.com (starts with nvapi-).'
+                : `${provider.toUpperCase()} requires a native API key from ${provider === 'deepseek' ? 'platform.deepseek.com' : 'platform.moonshot.cn'} (starts with sk-). To run analysis using your NVIDIA NIM token, select NVIDIA above.`}
+            </span>
+          </div>
         </div>
       )}
       {error && <div className="notice" role="alert"><AlertTriangle size={16} /><div><b>Analysis unavailable</b><span>{error}</span></div></div>}

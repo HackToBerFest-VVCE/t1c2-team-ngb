@@ -420,7 +420,7 @@ def ai_insights():
             "records": ai_records,
             "cve_selection": cve_selection,
         }
-        if not configuration(selected_provider)["configured"]:
+        if body.get("local"):
             return jsonify(analyze_locally(**kwargs))
         return jsonify(analyze(**kwargs, provider=selected_provider))
     except AIServiceError as exc:

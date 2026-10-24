@@ -101,8 +101,11 @@ def configuration(provider: str | None = None) -> dict:
         selected = "nvidia"
     key_name, default_model = MODELS[selected]
     api_key = os.getenv(key_name, "").strip()
+    configured = bool(api_key)
+    if selected in ("kimi", "deepseek") and api_key.startswith("nvapi-"):
+        configured = False
     return {
-        "configured": bool(api_key),
+        "configured": configured,
         "provider": selected,
         "model": default_model,
         "endpoint": ENDPOINTS[selected],
@@ -113,10 +116,14 @@ def configuration(provider: str | None = None) -> dict:
 
 def provider_options() -> list[dict]:
     """Expose selectable model families and configured status, never tokens."""
-    return [
-        {"provider": name, "model": model, "configured": bool(os.getenv(key_name, "").strip())}
-        for name, (key_name, model) in MODELS.items()
-    ]
+    opts = []
+    for name, (key_name, model) in MODELS.items():
+        key = os.getenv(key_name, "").strip()
+        configured = bool(key)
+        if name in ("kimi", "deepseek") and key.startswith("nvapi-"):
+            configured = False
+        opts.append({"provider": name, "model": model, "configured": configured})
+    return opts
 
 
 def _clean_payload(days: int, summary: dict, source: dict, anomalies: list, records, cve_selection: dict | None = None) -> dict:
@@ -256,6 +263,14 @@ def analyze(days: int, summary: dict, source: dict, anomalies: list, records, pr
         raise AIServiceError(
             "ai_not_configured",
             f"Add a rotated token to {cfg['key_name']} in the backend environment, then restart Flask.",
+        )
+    if cfg["provider"] in ("kimi", "deepseek") and cfg["api_key"].startswith("nvapi-"):
+        portal = "https://platform.deepseek.com" if cfg["provider"] == "deepseek" else "https://platform.moonshot.cn"
+        name = "DeepSeek" if cfg["provider"] == "deepseek" else "Moonshot Kimi"
+        raise AIServiceError(
+            "ai_key_provider_mismatch",
+            f"{name} requires an API key from {portal} (starts with 'sk-'). The configured {cfg['key_name']} is an NVIDIA NIM key ('nvapi-...'). To run analysis with your NVIDIA key, select NVIDIA in the model dropdown.",
+            400,
         )
     payload = _clean_payload(days, summary, source, anomalies, records, cve_selection)
     body = {
