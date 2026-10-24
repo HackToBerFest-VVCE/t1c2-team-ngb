@@ -10,3 +10,9 @@ dist/
 
 # TypeScript build metadata
 *.tsbuildinfo
+
+# Downloaded public datasets and locally trained model artifacts
+data/external/
+data/models/
+data/vulnerabilities.full.json
+data/full_catalog_metadata.json

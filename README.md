@@ -46,7 +46,7 @@ Open `http://localhost:5173`. Flask API is at `http://localhost:5000/api`. `DATA
 
 ## Data and attribution
 
-The bundled snapshot is 30 records fetched from NIST NVD API 2.0 during setup. See [docs/dataset.md](docs/dataset.md) and `data/snapshot_metadata.json` for the exact query window, fields, missing data, limitations, and rights notes. This snapshot is not refreshed automatically. Snowflake's documented TPC-H/TPC-DS samples are not cybersecurity datasets and are not represented as a qualifying source here. Marketplace/account eligibility must still be checked against the actual hackathon rules and account.
+The bundled snapshot is 30 records fetched from NIST NVD API 2.0 during setup. See [docs/dataset.md](docs/dataset.md) and `data/snapshot_metadata.json` for the query window, fields, missing data, limitations, and rights notes. This snapshot is not refreshed automatically. Snowflake's documented TPC-H/TPC-DS samples are not cybersecurity datasets and are not represented as a qualifying source here.
 
 To enlarge local data from NIST's annual compressed CVE 2.0 feeds (default: current year and two prior years):
 
@@ -55,6 +55,19 @@ python -m backend.app.data.nvd_sync
 # Full NVD history, 2002 to current year:
 python -m backend.app.data.nvd_sync --start-year 2002
 ```
+
+The full historical catalog is large and is not bundled in Git. Run the command above to build a local catalog; rerun it periodically to refresh the selected annual feeds. NVD records are distinct from evidence of observed attacks: CVSS severity does not mean a vulnerability was exploited.
+
+### Optional Hugging Face datasets and training
+
+Install the Python requirements, then import the reviewed public datasets and train their separate task models:
+
+```powershell
+python -m backend.app.data.hf_sync
+python -m backend.app.data.train_models
+```
+
+The import reads `hitoshura25/cvefixes` (Apache-2.0), `vinitvek/cybersecurityattacks` (Unlicense), and `pyToshka/network-intrusion-detection` (BSD-3-Clause) from Hugging Face. CVEfixes can require a large download. Imported data and trained model files are local, ignored by Git, and not bundled. The trainer keeps tasks separate, uses deterministic held-out evaluation, groups CVE code examples by CVE during splitting, and reports limitations at `GET /api/ml/training` and in the ML Insights page. The small honeypot dataset may not contain enough balanced labels to train a model; in that case the report explains why it was skipped. Dataset licenses, provenance, and labels should be reviewed before downstream use.
 
 After configuring the canonical table and Snowflake service credentials, load those same NVD feeds into Snowflake with `python -m backend.app.data.nvd_sync --start-year 2002 --target snowflake`. This is an NVD-origin dataset stored in Snowflake, not a Snowflake Marketplace dataset. Current workspace Snowflake credentials are not configured, so this path is implemented but not executed or verified.
 
@@ -81,7 +94,7 @@ pytest backend/tests
 cd frontend; npm test; npm run build
 ```
 
-No public GitHub repository or screenshots are included yet. The workspace did not start as a Git repository; a local Git repository has now been initialized. No remote or authenticated repository-creation/publishing destination was available. This code is licensed under MIT; NVD data terms remain separate.
+This code is licensed under MIT; third-party datasets and NVD data terms remain separate. External datasets and model artifacts are excluded from source control.
 
 ## License
 

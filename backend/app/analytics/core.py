@@ -148,7 +148,8 @@ def metrics(frame: pd.DataFrame) -> dict[str, Any]:
         ],
         "analysis_scope": (
             "All records loaded from the active provider (Snowflake rows are "
-            "bounded by SNOWFLAKE_MAX_ROWS; DEMO reads the local NVD snapshot). New publications use a "
+            "bounded by SNOWFLAKE_MAX_ROWS; DEMO reads the full local NVD catalog when imported, "
+            "otherwise the starter snapshot). New publications use a "
             "rolling 30-day UTC window."
         ),
     }

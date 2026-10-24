@@ -14,7 +14,8 @@ from pathlib import Path
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[3]
-DATA = ROOT / "data" / "vulnerabilities.json"
+SNAPSHOT_DATA = ROOT / "data" / "vulnerabilities.json"
+FULL_CATALOG_DATA = ROOT / "data" / "vulnerabilities.full.json"
 _DEMO_CACHE: tuple[int, int, pd.DataFrame] | None = None
 TABLE_RE = re.compile(
     r"^[A-Za-z_][A-Za-z0-9_$]*(\.[A-Za-z_][A-Za-z0-9_$]*){0,2}$"
@@ -39,13 +40,14 @@ class DemoProvider:
 
     def records(self) -> pd.DataFrame:
         global _DEMO_CACHE
-        if not DATA.exists():
+        data_path = FULL_CATALOG_DATA if FULL_CATALOG_DATA.exists() else SNAPSHOT_DATA
+        if not data_path.exists():
             return pd.DataFrame()
         try:
-            stat = DATA.stat()
+            stat = data_path.stat()
             if _DEMO_CACHE and _DEMO_CACHE[:2] == (stat.st_mtime_ns, stat.st_size):
                 return _DEMO_CACHE[2].copy()
-            raw = json.loads(DATA.read_text(encoding="utf-8-sig"))
+            raw = json.loads(data_path.read_text(encoding="utf-8-sig"))
             frame = pd.DataFrame(raw)
             _DEMO_CACHE = (stat.st_mtime_ns, stat.st_size, frame)
             return frame.copy()
@@ -55,10 +57,12 @@ class DemoProvider:
     def status(self) -> dict:
         metadata: dict = {}
         try:
-            metadata = json.loads(
-                (ROOT / "data" / "snapshot_metadata.json")
-                .read_text(encoding="utf-8")
+            metadata_path = (
+                ROOT / "data" / "full_catalog_metadata.json"
+                if FULL_CATALOG_DATA.exists()
+                else ROOT / "data" / "snapshot_metadata.json"
             )
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             pass
 
@@ -68,13 +72,14 @@ class DemoProvider:
         return {
             "mode": "DEMO",
             "connected": True,
-            "dataset": "Local NVD snapshot",
+            "dataset": "Full local NVD catalog" if FULL_CATALOG_DATA.exists() else "Local NVD snapshot",
             "provider": "NIST National Vulnerability Database (NVD)",
             "updated_at": metadata.get("retrieved_at"),
             "record_count": int((~rejected).sum()),
             "note": (
-                "Local NVD data for demonstration; "
-                "not live Snowflake data."
+                "Full local NVD catalog; not live Snowflake data."
+                if FULL_CATALOG_DATA.exists()
+                else "Local NVD sample for demonstration; not live Snowflake data."
             ),
         }
 

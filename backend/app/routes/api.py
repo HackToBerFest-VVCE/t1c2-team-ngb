@@ -8,6 +8,7 @@ elsewhere.  No user-supplied SQL is executed.
 import json
 import logging
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Literal
 
 import pandas as pd
@@ -20,6 +21,7 @@ from ..services.provider import ProviderError, get_provider, get_records, mode
 
 api = Blueprint("api", __name__)
 log = logging.getLogger("threatlens.api")
+ROOT = Path(__file__).resolve().parents[3]
 
 __version__ = "1.0.0"
 
@@ -426,6 +428,23 @@ def anomalies():
         "items": items,
         "evaluation": r["evaluation"],
     })
+
+
+@api.get("/ml/training")
+def training_report():
+    """Return the latest local held-out metrics for imported HF task models."""
+    report_path = ROOT / "data" / "models" / "training_report.json"
+    if not report_path.exists():
+        return jsonify({
+            "available": False,
+            "reason": "No training report exists yet. Import the public datasets and run the model training command.",
+            "sources": {},
+        })
+    try:
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return _error("training_report_unavailable", "The local model report could not be read.", 500)
+    return jsonify({"available": True, **report})
 
 
 # ── Data quality ──────────────────────────────────────────────────────

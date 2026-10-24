@@ -507,6 +507,7 @@ export function Risk() {
 export function ML() {
   const [clusters, setClusters] = useState<ClustersResponse | null>(null);
   const [anomalies, setAnomalies] = useState<any>(null);
+  const [training, setTraining] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -517,10 +518,12 @@ export function ML() {
     Promise.all([
       api<ClustersResponse>('/ml/clusters'),
       api<any>('/ml/anomalies'),
+      api<any>('/ml/training'),
     ])
-      .then(([cls, anm]) => {
+      .then(([cls, anm, report]) => {
         setClusters(cls);
         setAnomalies(anm);
+        setTraining(report);
       })
       .catch((err: Error) => {
         setError(err.message || 'Failed to load ML analysis');
@@ -544,15 +547,52 @@ export function ML() {
   return (
     <div className="ml-page animate-fade-in">
       <PageHeading
-        eyebrow="UNSUPERVISED MACHINE LEARNING"
+        eyebrow="SUPERVISED + UNSUPERVISED MACHINE LEARNING"
         title="ML Insights"
         description="Text-derived semantic clusters and anomaly scoring generated via reproducible pipelines."
         action={
           <Badge tone="violet">
-            <Sparkles size={13} /> Unsupervised Models
+            <Sparkles size={13} /> ML Models
           </Badge>
         }
       />
+
+      {training?.available && (
+        <>
+          <div className="section-title-wrap">
+            <h2>Supervised Models Trained from Hugging Face Data</h2>
+            <p>Each model uses a separate dataset and task-specific labels; scores are measured on held-out rows.</p>
+          </div>
+          <div className="cluster-grid">
+            {Object.entries(training.sources || {}).flatMap(([source, details]: [string, any]) =>
+              Object.entries(details || {})
+                .filter(([, value]: [string, any]) => value && typeof value === 'object' && 'status' in value)
+                .map(([task, value]: [string, any]) => (
+                  <Card
+                    key={`${source}-${task}`}
+                    title={task.replace(/_/g, ' ')}
+                    subtitle={`${source.replace(/_/g, ' ')} · ${value.status}`}
+                  >
+                    {value.status === 'trained' ? (
+                      <div className="evaluation-grid">
+                        <div className="eval-metric"><small>Held-out macro F1</small><p>{value.metrics?.macro_f1 ?? '—'}</p></div>
+                        <div className="eval-metric"><small>Held-out accuracy</small><p>{value.metrics?.accuracy ?? '—'}</p></div>
+                        <div className="eval-metric"><small>Training / test rows</small><p>{value.train_rows ?? '—'} / {value.test_rows ?? '—'}</p></div>
+                      </div>
+                    ) : (
+                      <p>{value.reason || 'Model not trained for this dataset.'}</p>
+                    )}
+                    {value.limitations && <p className="limitation-footer">{value.limitations}</p>}
+                  </Card>
+                ))
+            )}
+          </div>
+          <div className="notice">
+            <Info size={17} />
+            <div><b>Training scope</b><span>{training.notice} Models are local artifacts and are not committed to the repository.</span></div>
+          </div>
+        </>
+      )}
 
       {error ? (
         <Loading error={error} onRetry={loadML} />

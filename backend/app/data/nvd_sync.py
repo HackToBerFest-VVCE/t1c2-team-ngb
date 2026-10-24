@@ -5,7 +5,7 @@ Examples (from repository root):
   python -m backend.app.data.nvd_sync --start-year 2002 --target snowflake
 
 The yearly feeds are public; Snowflake writes require the configured service
-account. Local imports atomically replace data/vulnerabilities.json.
+account. Local imports atomically replace the ignored full-catalog file.
 """
 
 import argparse
@@ -25,8 +25,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parents[3]
-DATA_FILE = ROOT / "data" / "vulnerabilities.json"
-META_FILE = ROOT / "data" / "snapshot_metadata.json"
+DATA_FILE = ROOT / "data" / "vulnerabilities.full.json"
+META_FILE = ROOT / "data" / "full_catalog_metadata.json"
 FEED_URL = "https://nvd.nist.gov/feeds/json/cve/2.0/nvdcve-2.0-{year}.json.zip"
 
 
