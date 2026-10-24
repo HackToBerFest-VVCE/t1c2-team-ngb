@@ -1,0 +1,567 @@
+"""ThreatLens AI — Flask REST API routes.
+
+All endpoints return structured JSON with consistent error shapes.
+Input is validated via Pydantic where appropriate and manual checks
+elsewhere.  No user-supplied SQL is executed.
+"""
+
+import json
+import logging
+from datetime import datetime, timezone
+from typing import Literal
+
+import pandas as pd
+from flask import Blueprint, Response, jsonify, request
+from pydantic import BaseModel, Field, ValidationError
+
+from ..analytics.core import add_priority, metrics, ml_results, safe_records
+from ..services.ai import AIServiceError, MODELS, analyze, configuration, provider_options
+from ..services.provider import ProviderError, get_provider, get_records, mode
+
+api = Blueprint("api", __name__)
+log = logging.getLogger("threatlens.api")
+
+__version__ = "1.0.0"
+
+
+# ── Helpers ───────────────────────────────────────────────────────────
+
+def _error(code: str, message: str, status: int):
+    return jsonify({"error": {"code": code, "message": message}}), status
+
+
+def _records():
+    """Load records from the active provider and attach priority scores."""
+    return add_priority(get_records())
+
+
+def _public_rows(frame: pd.DataFrame) -> list[dict]:
+    """Serialise a DataFrame to JSON-safe dicts."""
+    out = safe_records(frame)
+    for row in out:
+        for key, val in list(row.items()):
+            if hasattr(val, "isoformat"):
+                row[key] = val.isoformat()
+            elif hasattr(val, "item"):
+                row[key] = val.item()
+    return out
+
+
+# ── Health & data sources ─────────────────────────────────────────────
+
+@api.get("/health")
+def health():
+    """Service health check with source connectivity."""
+    try:
+        status = get_provider().status()
+        return jsonify({
+            "status": "ok",
+            "source": status,
+            "version": __version__,
+        })
+    except ProviderError:
+        return jsonify({
+            "status": "degraded",
+            "source": {
+                "mode": mode().upper(),
+                "connected": False,
+            },
+            "version": __version__,
+        }), 503
+
+
+@api.get("/data-sources")
+def data_sources():
+    """Report active data source and available modes."""
+    try:
+        return jsonify({
+            "active": get_provider().status(),
+            "available": ["demo", "snowflake"],
+        })
+    except ProviderError as exc:
+        return _error("data_source_unavailable", str(exc), 503)
+
+
+# ── Metrics ───────────────────────────────────────────────────────────
+
+@api.get("/metrics")
+def get_metrics():
+    """Dashboard-level aggregate metrics."""
+    return jsonify(metrics(_records()))
+
+
+# ── Vulnerabilities ───────────────────────────────────────────────────
+
+@api.get("/vulnerabilities")
+def vulnerabilities():
+    """Paginated, filterable vulnerability list."""
+    try:
+        frame = _records()
+
+        # ── Text search ───────────────────────────────────────────────
+        q = request.args.get("q", "").strip()
+        if len(q) > 200:
+            return _error(
+                "invalid_parameter",
+                "q must be at most 200 characters.",
+                400,
+            )
+        if q:
+            searchable = (
+                frame[["cve_id", "description", "affected_products", "cwe"]]
+                .fillna("").astype(str)
+            )
+            mask = searchable.apply(
+                lambda col: col.str.contains(q, case=False, regex=False)
+            ).any(axis=1)
+            frame = frame[mask]
+
+        # ── Severity filter ───────────────────────────────────────────
+        severity = request.args.get("severity")
+        if severity:
+            vals = {x.strip().upper() for x in severity.split(",")}
+            allowed = {"CRITICAL", "HIGH", "MEDIUM", "LOW", "NONE", "UNKNOWN"}
+            if not vals.issubset(allowed):
+                return _error(
+                    "invalid_parameter", "Unsupported severity.", 400
+                )
+            frame = frame[frame.severity.isin(vals)]
+
+        # ── Date range filter ─────────────────────────────────────────
+        for param, comparator in (("from", "ge"), ("to", "le")):
+            val = request.args.get(param)
+            if val:
+                try:
+                    dt = pd.to_datetime(val, utc=True, errors="raise")
+                except Exception:
+                    return _error(
+                        "invalid_parameter",
+                        f"{param} must be an ISO date.",
+                        400,
+                    )
+                if comparator == "ge":
+                    frame = frame[frame.published >= dt]
+                else:
+                    frame = frame[frame.published <= dt]
+
+        # ── Score range filter ────────────────────────────────────────
+        for param, comparator in (("min_score", "ge"), ("max_score", "le")):
+            val = request.args.get(param)
+            if val:
+                try:
+                    score = float(val)
+                except ValueError:
+                    return _error(
+                        "invalid_parameter",
+                        f"{param} must be numeric.",
+                        400,
+                    )
+                if not 0 <= score <= 10:
+                    return _error(
+                        "invalid_parameter",
+                        f"{param} must be between 0 and 10.",
+                        400,
+                    )
+                if comparator == "ge":
+                    frame = frame[frame.cvss_score >= score]
+                else:
+                    frame = frame[frame.cvss_score <= score]
+
+        # ── CWE filter ────────────────────────────────────────────────
+        cwe = request.args.get("cwe")
+        if cwe:
+            frame = frame[
+                frame.cwe.fillna("").astype(str)
+                .str.contains(cwe, case=False, regex=False)
+            ]
+
+        # ── Sorting ───────────────────────────────────────────────────
+        sort = request.args.get("sort", "published")
+        allowed_sorts = {"published", "cvss_score", "priority_score", "cve_id"}
+        if sort not in allowed_sorts:
+            return _error(
+                "invalid_parameter", "Unsupported sort field.", 400
+            )
+
+        order = request.args.get("order", "desc").lower()
+        if order not in {"asc", "desc"}:
+            return _error(
+                "invalid_parameter", "order must be asc or desc.", 400
+            )
+        frame = frame.sort_values(
+            sort, ascending=(order == "asc"), na_position="last"
+        )
+
+        # ── Pagination ────────────────────────────────────────────────
+        try:
+            page = max(1, int(request.args.get("page", "1")))
+            per = max(1, min(100, int(request.args.get("per_page", "20"))))
+        except ValueError:
+            return _error(
+                "invalid_parameter",
+                "page and per_page must be integers.",
+                400,
+            )
+
+        total = len(frame)
+        pages = max(1, (total + per - 1) // per)
+        start = (page - 1) * per
+        items = _public_rows(frame.iloc[start : start + per])
+
+        return jsonify({
+            "items": items,
+            "page": page,
+            "per_page": per,
+            "total": total,
+            "pages": pages,
+        })
+
+    except ProviderError:
+        return _error(
+            "data_source_unavailable",
+            "The configured data source is unavailable.",
+            503,
+        )
+
+
+@api.get("/vulnerabilities/<cve_id>")
+def vulnerability(cve_id: str):
+    """Single CVE record by identifier."""
+    if len(cve_id) > 64:
+        return _error("invalid_parameter", "Invalid CVE identifier.", 400)
+
+    frame = _records()
+    match = frame[frame.cve_id.str.upper() == cve_id.upper()]
+    if match.empty:
+        return _error("not_found", "Vulnerability not found.", 404)
+
+    return jsonify(_public_rows(match.head(1))[0])
+
+
+# ── Trends ────────────────────────────────────────────────────────────
+
+@api.get("/trends")
+def trends():
+    """Time-series publication and severity trends."""
+    frame = _records().dropna(subset=["published"])
+    all_dated = frame
+
+    days_str = request.args.get("days", "365")
+    try:
+        days = int(days_str)
+    except ValueError:
+        return _error("invalid_parameter", "days must be an integer.", 400)
+    if not 1 <= days <= 3650:
+        return _error(
+            "invalid_parameter", "days must be between 1 and 3650.", 400
+        )
+
+    end = pd.Timestamp.now(tz="UTC")
+    start = end - pd.Timedelta(days=days)
+    frame = frame[(frame.published >= start) & (frame.published <= end)].copy()
+    previous = all_dated[
+        (all_dated.published >= start - pd.Timedelta(days=days))
+        & (all_dated.published < start)
+    ]
+    frame["month"] = frame.published.dt.strftime("%Y-%m")
+
+    severities = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"]
+    # Include every calendar month touched by the rolling window, including
+    # empty months. This makes horizon changes visible even when counts are 0.
+    months = pd.period_range(
+        start=start.tz_localize(None).to_period("M"),
+        end=end.tz_localize(None).to_period("M"),
+        freq="M",
+    ).astype(str)
+    counts = frame.groupby(["month", "severity"]).size().unstack(fill_value=0)
+    ts = counts.reindex(index=months, columns=severities, fill_value=0).reset_index()
+    ts = ts.rename(columns={"index": "month"})
+
+    summary = metrics(frame)
+    previous_count = int(len(previous))
+    delta = int(len(frame)) - previous_count
+    coverage_start = all_dated.published.min() if not all_dated.empty else None
+    coverage_end = all_dated.published.max() if not all_dated.empty else None
+    coverage_limited = bool(coverage_start is not None and coverage_start > start)
+    return jsonify({
+        "days": days,
+        "items": _public_rows(ts),
+        "count": int(len(frame)),
+        "comparison": {
+            "previous_count": previous_count,
+            "delta": delta,
+            "percent": round(delta / previous_count * 100, 1) if previous_count else None,
+        },
+        "top_cwe": summary["top_cwe"][:5],
+        "top_products": summary["top_products"][:5],
+        "coverage": {
+            "from": coverage_start.isoformat() if coverage_start is not None else None,
+            "to": coverage_end.isoformat() if coverage_end is not None else None,
+            "dated_records": int(len(all_dated)),
+            "limited_for_window": coverage_limited,
+        },
+        "from": start.isoformat(),
+        "to": end.isoformat(),
+        "bucket": "month",
+        "limitations": (
+            "Publication dates only; no inference about active exploitation. "
+            "Counts are restricted to the selected rolling window and "
+            "available source records; empty months outside source date coverage "
+            "are unknown, not verified zero activity."
+        ),
+    })
+
+
+@api.get("/ai/status")
+def ai_status():
+    """Report configured model availability without exposing credentials."""
+    config = configuration()
+    return jsonify({
+        "configured": config["configured"],
+        "provider": config["provider"],
+        "model": config["model"],
+        "endpoint": config["endpoint"],
+        "providers": provider_options(),
+        "note": "API credentials remain server-side; prompts contain dataset aggregates and a small sample of public CVE records.",
+    })
+
+
+@api.post("/ai/insights")
+def ai_insights():
+    """Generate a bounded, evidence-grounded analysis of the active dataset."""
+    body = request.get_json(silent=True)
+    if body is None:
+        body = {}
+    if not isinstance(body, dict):
+        return _error("invalid_request", "Request body must be a JSON object.", 400)
+    days = body.get("days", 90)
+    if isinstance(days, bool) or not isinstance(days, int) or not 1 <= days <= 3650:
+        return _error("invalid_parameter", "days must be an integer between 1 and 3650.", 400)
+    selected_provider = body.get("provider")
+    if selected_provider is not None:
+        if not isinstance(selected_provider, str) or selected_provider.strip().lower() not in MODELS:
+            return _error("invalid_parameter", "provider must be nvidia, kimi, or deepseek.", 400)
+        selected_provider = selected_provider.strip().lower()
+    try:
+        frame = _records().dropna(subset=["published"])
+        now = pd.Timestamp.now(tz="UTC")
+        window = frame[(frame.published >= now - pd.Timedelta(days=days)) & (frame.published <= now)]
+        summary = metrics(window)
+        ml = ml_results(window)
+        anomalies = ml.get("anomalies", [])
+        source = get_provider().status()
+        return jsonify(analyze(
+            days=days,
+            summary=summary,
+            source={"mode": source["mode"], "dataset": source["dataset"], "record_count": source["record_count"]},
+            anomalies=anomalies[:5],
+            records=window.sort_values("published", ascending=False).head(8),
+            provider=selected_provider,
+        ))
+    except AIServiceError as exc:
+        return _error(exc.code, exc.public_message, exc.status_code)
+
+
+# ── Risk analysis ─────────────────────────────────────────────────────
+
+RISK_METHOD = {
+    "name": "ThreatLens priority score",
+    "formula": "100 × (0.8 × CVSS/10 + 0.2 × recency)",
+    "recency": (
+        "max(0, 1 - age_days/365), based on publication date in UTC"
+    ),
+    "missing": (
+        "If CVSS is absent, use recency only (max 20); "
+        "if publication date is absent, use CVSS only; "
+        "if both are absent, score is unavailable."
+    ),
+    "warning": (
+        "Custom investigation-priority heuristic; not an official CVSS "
+        "score and not evidence of exploitation."
+    ),
+}
+
+
+@api.get("/risk-analysis")
+def risk():
+    """Prioritised record list with transparent methodology."""
+    frame = _records()
+    top = frame.sort_values(
+        "priority_score", ascending=False, na_position="last"
+    ).head(100)
+
+    return jsonify({
+        "method": RISK_METHOD,
+        "items": _public_rows(top),
+    })
+
+
+# ── ML endpoints ──────────────────────────────────────────────────────
+
+@api.get("/ml/clusters")
+def clusters():
+    """K-Means text clusters from vulnerability descriptions."""
+    r = ml_results(_records())
+    return jsonify({
+        "available": r["available"],
+        "reason": r.get("reason"),
+        "clusters": r["clusters"],
+        "evaluation": r["evaluation"],
+    })
+
+
+@api.get("/ml/anomalies")
+def anomalies():
+    """Isolation Forest anomaly scores."""
+    r = ml_results(_records())
+    anomaly_list = r["anomalies"]
+    if anomaly_list and isinstance(anomaly_list[0], dict):
+        items = anomaly_list
+    else:
+        items = _public_rows(pd.DataFrame(anomaly_list)) if anomaly_list else []
+
+    return jsonify({
+        "available": r["available"],
+        "reason": r.get("reason"),
+        "items": items,
+        "evaluation": r["evaluation"],
+    })
+
+
+# ── Data quality ──────────────────────────────────────────────────────
+
+@api.get("/data-quality")
+def data_quality():
+    """Schema inspection and data-completeness summary."""
+    frame = get_records()
+
+    fields = []
+    for col in frame.columns:
+        missing = int(frame[col].isna().sum())
+        pct = round(float(frame[col].isna().mean() * 100), 1) if len(frame) else 0
+        fields.append({
+            "name": col,
+            "type": str(frame[col].dtype),
+            "missing": missing,
+            "missing_percent": pct,
+        })
+
+    last_pub = None
+    if frame.published.notna().any():
+        last_pub = frame.published.max().isoformat()
+
+    return jsonify({
+        "source": get_provider().status(),
+        "record_count": len(frame),
+        "fields": fields,
+        "last_publication": last_pub,
+        "ingestion": (
+            "Source provider normalization: UTC publication dates, "
+            "numeric CVSS parsing, uppercase CVE/severity, "
+            "absent optional columns represented as null."
+        ),
+    })
+
+
+# ── Reports ───────────────────────────────────────────────────────────
+
+@api.get("/reports/summary")
+def report_summary():
+    """Generate a report summary for the active analysis scope."""
+    frame = _records()
+    now = datetime.now(timezone.utc).isoformat()
+
+    return jsonify({
+        "generated_at": now,
+        "source": get_provider().status(),
+        "metrics": metrics(frame),
+        "prioritized": _public_rows(
+            frame.sort_values(
+                "priority_score", ascending=False, na_position="last"
+            ).head(10)
+        ),
+        "method": (
+            "100 × (0.8 × CVSS/10 + 0.2 × max(0,1-age_days/365)); "
+            "missing fields use available component only."
+        ),
+        "limitations": (
+            "Priority is a local triage heuristic, not an official score "
+            "or attack confirmation. Machine learning is unsupervised "
+            "and has no labeled ground truth."
+        ),
+    })
+
+
+class ExportRequest(BaseModel):
+    """Validated export request body."""
+    format: Literal["csv", "json"] = "csv"
+    q: str = Field(default="", max_length=200)
+    severity: list[str] = Field(default_factory=list)
+
+
+@api.post("/reports/export")
+def export_report():
+    """Export filtered records as CSV or JSON download."""
+    try:
+        body = ExportRequest.model_validate(
+            request.get_json(silent=True) or {}
+        )
+    except ValidationError as exc:
+        return _error("invalid_request", exc.errors()[0]["msg"], 400)
+
+    frame = _records()
+
+    # ── Apply optional text filter ────────────────────────────────────
+    if body.q:
+        searchable = (
+            frame[["cve_id", "description", "affected_products", "cwe"]]
+            .fillna("").astype(str)
+        )
+        mask = searchable.apply(
+            lambda col: col.str.contains(body.q, case=False, regex=False)
+        ).any(axis=1)
+        frame = frame[mask]
+
+    # ── Apply severity filter ─────────────────────────────────────────
+    if body.severity:
+        allowed = {"CRITICAL", "HIGH", "MEDIUM", "LOW", "NONE", "UNKNOWN"}
+        upper = {x.upper() for x in body.severity}
+        if not upper.issubset(allowed):
+            return _error("invalid_request", "Unsupported severity.", 400)
+        frame = frame[frame.severity.isin(upper)]
+
+    # ── JSON export ───────────────────────────────────────────────────
+    if body.format == "json":
+        return Response(
+            json.dumps(_public_rows(frame), ensure_ascii=False),
+            mimetype="application/json",
+            headers={
+                "Content-Disposition": (
+                    "attachment; filename=threatlens-vulnerabilities.json"
+                ),
+            },
+        )
+
+    # ── CSV export (with formula-injection protection) ────────────────
+    csv_frame = frame.copy()
+    dangerous_prefixes = ("=", "+", "-", "@", "\t", "\r")
+    for col in csv_frame.columns:
+        if csv_frame[col].dtype == object:
+            csv_frame[col] = csv_frame[col].map(
+                lambda val: (
+                    "'" + val
+                    if isinstance(val, str) and val.startswith(dangerous_prefixes)
+                    else val
+                )
+            )
+
+    csv_data = csv_frame.to_csv(index=False)
+    return Response(
+        csv_data,
+        mimetype="text/csv",
+        headers={
+            "Content-Disposition": (
+                "attachment; filename=threatlens-vulnerabilities.csv"
+            ),
+        },
+    )
