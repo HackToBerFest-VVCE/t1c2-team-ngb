@@ -7,6 +7,7 @@ The application clearly labels output as LIVE or DEMO.
 """
 
 import json
+import gzip
 import os
 import re
 import time
@@ -17,6 +18,7 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[3]
 SNAPSHOT_DATA = ROOT / "data" / "vulnerabilities.json"
 FULL_CATALOG_DATA = ROOT / "data" / "vulnerabilities.full.json"
+FULL_CATALOG_GZIP = ROOT / "data" / "vulnerabilities.full.json.gz"
 _DEMO_CACHE: tuple[int, int, pd.DataFrame] | None = None
 TABLE_RE = re.compile(
     r"^[A-Za-z_][A-Za-z0-9_$]*(\.[A-Za-z_][A-Za-z0-9_$]*){0,2}$"
@@ -36,6 +38,15 @@ def mode() -> str:
     return os.getenv("DATA_SOURCE", "demo").lower()
 
 
+def _full_catalog_path() -> Path | None:
+    """Return the full NVD catalog in raw or compressed form when available."""
+    if FULL_CATALOG_DATA.exists():
+        return FULL_CATALOG_DATA
+    if FULL_CATALOG_GZIP.exists():
+        return FULL_CATALOG_GZIP
+    return None
+
+
 # ─────────────────────────────────────────────────────────────────────
 # Demo provider — bundled NVD snapshot
 # ─────────────────────────────────────────────────────────────────────
@@ -45,14 +56,18 @@ class DemoProvider:
 
     def records(self) -> pd.DataFrame:
         global _DEMO_CACHE
-        data_path = FULL_CATALOG_DATA if FULL_CATALOG_DATA.exists() else SNAPSHOT_DATA
+        data_path = _full_catalog_path() or SNAPSHOT_DATA
         if not data_path.exists():
             return pd.DataFrame()
         try:
             stat = data_path.stat()
             if _DEMO_CACHE and _DEMO_CACHE[:2] == (stat.st_mtime_ns, stat.st_size):
                 return _DEMO_CACHE[2]
-            raw = json.loads(data_path.read_text(encoding="utf-8-sig"))
+            if data_path.suffix == ".gz":
+                with gzip.open(data_path, "rt", encoding="utf-8-sig") as source:
+                    raw = json.load(source)
+            else:
+                raw = json.loads(data_path.read_text(encoding="utf-8-sig"))
             frame = pd.DataFrame(raw)
             _DEMO_CACHE = (stat.st_mtime_ns, stat.st_size, frame)
             return frame
@@ -64,7 +79,7 @@ class DemoProvider:
         try:
             metadata_path = (
                 ROOT / "data" / "full_catalog_metadata.json"
-                if FULL_CATALOG_DATA.exists()
+                if _full_catalog_path() is not None
                 else ROOT / "data" / "snapshot_metadata.json"
             )
             metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
@@ -77,13 +92,13 @@ class DemoProvider:
         return {
             "mode": "DEMO",
             "connected": True,
-            "dataset": "Full local NVD catalog" if FULL_CATALOG_DATA.exists() else "Local NVD snapshot",
+            "dataset": "Full local NVD catalog" if _full_catalog_path() is not None else "Local NVD snapshot",
             "provider": "NIST National Vulnerability Database (NVD)",
             "updated_at": metadata.get("retrieved_at"),
             "record_count": int((~rejected).sum()),
             "note": (
                 "Full local NVD catalog; not live Snowflake data."
-                if FULL_CATALOG_DATA.exists()
+                if _full_catalog_path() is not None
                 else "Local NVD sample for demonstration; not live Snowflake data."
             ),
         }
@@ -238,7 +253,7 @@ def get_records() -> pd.DataFrame:
     global _RECORDS_CACHE
 
     # Determine current data-file identity for cache validation
-    data_path = FULL_CATALOG_DATA if FULL_CATALOG_DATA.exists() else SNAPSHOT_DATA
+    data_path = _full_catalog_path() or SNAPSHOT_DATA
     try:
         stat = data_path.stat()
         file_mtime, file_size = stat.st_mtime_ns, stat.st_size

@@ -1,0 +1,177 @@
+{
+  "trained_at": "2026-10-24T16:20:08.569437+00:00",
+  "random_state": 42,
+  "sources": {
+    "cvefixes": {
+      "repo_id": "hitoshura25/cvefixes",
+      "license": "apache-2.0",
+      "code_vulnerability": {
+        "status": "trained",
+        "task": "Distinguish vulnerable from fixed code snippets",
+        "source_rows": 12056,
+        "code_examples": 12000,
+        "distinct_cves": 6135,
+        "train_rows": 9587,
+        "test_rows": 2413,
+        "split": "Grouped by CVE identifier to reduce same-CVE train/test leakage.",
+        "metrics": {
+          "accuracy": 0.6917,
+          "macro_f1": 0.6904,
+          "weighted_f1": 0.6926,
+          "per_class": {
+            "fixed": {
+              "precision": 0.7432762836185819,
+              "recall": 0.680089485458613,
+              "f1-score": 0.7102803738317757,
+              "support": 1341.0
+            },
+            "vulnerable": {
+              "precision": 0.6382799325463744,
+              "recall": 0.7061567164179104,
+              "f1-score": 0.6705048715677591,
+              "support": 1072.0
+            },
+            "accuracy": 0.6916701201823456,
+            "macro avg": {
+              "precision": 0.6907781080824782,
+              "recall": 0.6931231009382617,
+              "f1-score": 0.6903926226997674,
+              "support": 2413.0
+            },
+            "weighted avg": {
+              "precision": 0.696630577713316,
+              "recall": 0.6916701201823456,
+              "f1-score": 0.6926096989759838,
+              "support": 2413.0
+            }
+          }
+        },
+        "model_file": "cve_code_vulnerability.joblib",
+        "limitations": "Research triage only; code-level predictions can miss vulnerabilities and must not replace review or testing."
+      },
+      "severity_from_description": {
+        "status": "trained",
+        "task": "Predict severity from selected descriptive text",
+        "source_rows": 12056,
+        "labeled_rows": 7692,
+        "train_rows": 6153,
+        "test_rows": 1539,
+        "class_counts": {
+          "MEDIUM": 5068,
+          "HIGH": 1628,
+          "LOW": 996
+        },
+        "metrics": {
+          "accuracy": 0.7537,
+          "macro_f1": 0.7148,
+          "weighted_f1": 0.7602,
+          "per_class": {
+            "HIGH": {
+              "precision": 0.6057692307692307,
+              "recall": 0.7730061349693251,
+              "f1-score": 0.6792452830188679,
+              "support": 326.0
+            },
+            "LOW": {
+              "precision": 0.5859375,
+              "recall": 0.7537688442211056,
+              "f1-score": 0.6593406593406593,
+              "support": 199.0
+            },
+            "MEDIUM": {
+              "precision": 0.8742791234140715,
+              "recall": 0.747534516765286,
+              "f1-score": 0.8059542796384902,
+              "support": 1014.0
+            },
+            "accuracy": 0.7537361923326835,
+            "macro avg": {
+              "precision": 0.6886619513944341,
+              "recall": 0.7581031653185722,
+              "f1-score": 0.7148467406660058,
+              "support": 1539.0
+            },
+            "weighted avg": {
+              "precision": 0.780117844621597,
+              "recall": 0.7537361923326835,
+              "f1-score": 0.7601562007968623,
+              "support": 1539.0
+            }
+          }
+        },
+        "model_file": "cve_severity.joblib",
+        "limitations": "Held-out performance on this dataset only; dataset labels and source coverage may be incomplete or biased."
+      }
+    },
+    "incident_reports": {
+      "repo_id": "vinitvek/cybersecurityattacks",
+      "license": "unlicense",
+      "event_type": {
+        "status": "trained",
+        "task": "Predict event_type from selected descriptive text",
+        "source_rows": 13407,
+        "labeled_rows": 13237,
+        "train_rows": 10589,
+        "test_rows": 2648,
+        "class_counts": {
+          "Exploitive": 6679,
+          "Disruptive": 4158,
+          "Mixed": 2400
+        },
+        "metrics": {
+          "accuracy": 0.8829,
+          "macro_f1": 0.858,
+          "weighted_f1": 0.8831,
+          "per_class": {
+            "Disruptive": {
+              "precision": 0.8771712158808933,
+              "recall": 0.8497596153846154,
+              "f1-score": 0.8632478632478633,
+              "support": 832.0
+            },
+            "Exploitive": {
+              "precision": 0.9308035714285714,
+              "recall": 0.936377245508982,
+              "f1-score": 0.9335820895522388,
+              "support": 1336.0
+            },
+            "Mixed": {
+              "precision": 0.7630522088353414,
+              "recall": 0.7916666666666666,
+              "f1-score": 0.7770961145194274,
+              "support": 480.0
+            },
+            "accuracy": 0.8829305135951662,
+            "macro avg": {
+              "precision": 0.8570089987149353,
+              "recall": 0.859267842520088,
+              "f1-score": 0.8579753557731765,
+              "support": 2648.0
+            },
+            "weighted avg": {
+              "precision": 0.8835442157411021,
+              "recall": 0.8829305135951662,
+              "f1-score": 0.8831170803751277,
+              "support": 2648.0
+            }
+          }
+        },
+        "model_file": "incident_event_type.joblib",
+        "limitations": "Held-out performance on this dataset only; dataset labels and source coverage may be incomplete or biased."
+      }
+    },
+    "honeypot_intrusions": {
+      "repo_id": "pyToshka/network-intrusion-detection",
+      "license": "bsd-3-clause",
+      "malicious_event": {
+        "status": "unavailable",
+        "reason": "At least five labeled examples per class are required; small honeypot datasets are not treated as generalizable training truth.",
+        "labeled_rows": 100,
+        "class_counts": {
+          "malicious": 100
+        }
+      }
+    }
+  },
+  "notice": "Models are trained separately per task; scores are held-out dataset metrics, not proof of real-world detection capability."
+}

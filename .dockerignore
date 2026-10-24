@@ -9,6 +9,9 @@ node_modules
 frontend/node_modules
 frontend/dist
 data/external
-data/models
+data/models/*
+!data/models/cve_code_vulnerability.joblib
+!data/models/cve_severity.joblib
+!data/models/incident_event_type.joblib
+!data/models/training_report.json
 data/vulnerabilities.full.json
-data/full_catalog_metadata.json

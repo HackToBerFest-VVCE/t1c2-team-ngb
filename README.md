@@ -56,7 +56,7 @@ python -m backend.app.data.nvd_sync
 python -m backend.app.data.nvd_sync --start-year 2002
 ```
 
-The full historical catalog is large and is not bundled in Git. Run the command above to build a local catalog; rerun it periodically to refresh the selected annual feeds. NVD records are distinct from evidence of observed attacks: CVSS severity does not mean a vulnerability was exploited.
+The raw historical catalog is large and stays out of Git. A compressed copy of the current public NVD catalog is bundled for the hosted DEMO so it matches the full-catalog local view; refresh it by regenerating `data/vulnerabilities.full.json` and its metadata, then recompressing the JSON file. NVD records are distinct from evidence of observed attacks: CVSS severity does not mean a vulnerability was exploited.
 
 ### Optional Hugging Face datasets and training
 
@@ -67,7 +67,7 @@ python -m backend.app.data.hf_sync
 python -m backend.app.data.train_models
 ```
 
-The import reads `hitoshura25/cvefixes` (Apache-2.0), `vinitvek/cybersecurityattacks` (Unlicense), and `pyToshka/network-intrusion-detection` (BSD-3-Clause) from Hugging Face. CVEfixes can require a large download. Imported data and trained model files are local, ignored by Git, and not bundled. The trainer keeps tasks separate, uses deterministic held-out evaluation, groups CVE code examples by CVE during splitting, and reports limitations at `GET /api/ml/training` and in the ML Insights page. The small honeypot dataset may not contain enough balanced labels to train a model; in that case the report explains why it was skipped. Dataset licenses, provenance, and labels should be reviewed before downstream use.
+The import reads `hitoshura25/cvefixes` (Apache-2.0), `vinitvek/cybersecurityattacks` (Unlicense), and `pyToshka/network-intrusion-detection` (BSD-3-Clause) from Hugging Face. CVEfixes can require a large download. Downloaded source data stays local and ignored by Git; the trained task artifacts and evaluation report are bundled so the hosted ML Insights page matches the local results. The trainer keeps tasks separate, uses deterministic held-out evaluation, groups CVE code examples by CVE during splitting, and reports limitations at `GET /api/ml/training` and in the ML Insights page. The small honeypot dataset may not contain enough balanced labels to train a model; in that case the report explains why it was skipped. Dataset licenses, provenance, and labels should be reviewed before downstream use.
 
 For the live Snowflake dataset, configure `DATA_SOURCE=snowflake` and point `SNOWFLAKE_TABLE` at a table or compatibility view exposing the canonical CVE columns. Snowflake-backed dashboard aggregates, clustering, and anomaly analysis use that active source. Hugging Face supervised models remain a separate training path and are trained from the selected HF datasets by `train_models`; a Snowflake marketplace table is not silently mixed into those training sets. The optional `nvd_sync --target snowflake` command loads NVD-origin records into a writable Snowflake table; it is not a Marketplace dataset. No account credentials or Marketplace dataset identity are available in this workspace, so a live source has not yet been connected or verified.
 

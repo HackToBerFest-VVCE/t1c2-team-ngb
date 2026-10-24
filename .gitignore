@@ -19,3 +19,12 @@ data/external/
 data/models/
 data/vulnerabilities.full.json
 data/full_catalog_metadata.json
+
+# Bundle the public full NVD catalog and the local HF training outputs used by
+# the hosted ML Insights page. Raw NVD JSON and downloaded HF source data stay local.
+!data/models/
+!data/models/cve_code_vulnerability.joblib
+!data/models/cve_severity.joblib
+!data/models/incident_event_type.joblib
+!data/models/training_report.json
+!data/full_catalog_metadata.json
