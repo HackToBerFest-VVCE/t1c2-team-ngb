@@ -2,14 +2,16 @@
 
 import json
 import os
+import time
 from datetime import datetime, timezone
 from urllib.error import HTTPError, URLError
+from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 
 NIM_ENDPOINT = "https://integrate.api.nvidia.com/v1/chat/completions"
 MODELS = {
-    "nvidia": ("NVIDIA_API_KEY", "nvidia/llama-3.3-nemotron-super-49b-v1"),
+    "nvidia": ("NVIDIA_API_KEY", "nvidia/nemotron-3.5-lightning-30b-a3b"),
     "kimi": ("KIMI_API_KEY", "moonshotai/kimi-k2.5"),
     "deepseek": ("DEEPSEEK_API_KEY", "deepseek-ai/deepseek-v4-flash"),
 }
@@ -21,6 +23,66 @@ class AIServiceError(RuntimeError):
         self.code = code
         self.public_message = public_message
         self.status_code = status_code
+
+
+def _provider_error(status: int) -> AIServiceError:
+    """Return a useful, sanitized message without exposing provider bodies."""
+    messages = {
+        400: ("ai_request_rejected", "NVIDIA rejected the analysis request. Try a shorter analysis window."),
+        401: ("ai_authentication_failed", "NVIDIA rejected the API key. Check or rotate NVIDIA_API_KEY, then restart Flask."),
+        402: ("ai_credits_required", "NVIDIA requires available API credits for this request. Check your NVIDIA API account."),
+        403: ("ai_model_access_denied", "NVIDIA denied access to this model. Check model availability and account access."),
+        404: ("ai_model_unavailable", "The configured NVIDIA model endpoint was not found. Update the model selection."),
+        422: ("ai_request_rejected", "NVIDIA rejected the model request. The provider may have changed its accepted parameters."),
+        429: ("ai_rate_limited", "NVIDIA rate or usage limits were reached. Wait briefly or check your account limits."),
+    }
+    code, message = messages.get(
+        status,
+        ("ai_unavailable", "NVIDIA could not complete the analysis right now. Please retry shortly."),
+    )
+    return AIServiceError(code, message, 503 if status in (401, 402, 403, 429) else 502)
+
+
+def _read_json(response) -> dict:
+    raw = response.read(2_000_001)
+    if len(raw) > 2_000_000:
+        raise ValueError("provider response exceeds size limit")
+    return json.loads(raw)
+
+
+def _resolve_completion(response, api_key: str) -> dict:
+    """Read a synchronous response or poll NVIDIA's documented 202 result."""
+    result = _read_json(response)
+    if response.status != 202:
+        return result
+    request_id = result.get("requestId") or result.get("request_id")
+    if not isinstance(request_id, str) or not request_id or len(request_id) > 64:
+        raise ValueError("provider omitted pending request id")
+
+    status_url = f"{NIM_ENDPOINT.rsplit('/chat/completions', 1)[0]}/status/{quote(request_id, safe='')}"
+    deadline = time.monotonic() + 35
+    while time.monotonic() < deadline:
+        time.sleep(1)
+        poll = Request(
+            status_url,
+            headers={"Authorization": f"Bearer {api_key}", "Accept": "application/json"},
+            method="GET",
+        )
+        try:
+            with urlopen(poll, timeout=10) as polled:
+                result = _read_json(polled)
+                if polled.status == 202:
+                    continue
+                return result
+        except HTTPError as exc:
+            if exc.code == 202:
+                continue
+            raise _provider_error(exc.code) from None
+    raise AIServiceError(
+        "ai_generation_timeout",
+        "NVIDIA accepted the request but did not finish before the wait limit. Please retry.",
+        504,
+    )
 
 
 def configuration(provider: str | None = None) -> dict:
@@ -91,8 +153,10 @@ def analyze(days: int, summary: dict, source: dict, anomalies: list, records, pr
     body = {
         "model": cfg["model"],
         "temperature": 0.2,
-        "max_tokens": 1200,
+        "top_p": 0.95,
+        "max_tokens": 1800,
         "stream": False,
+        "chat_template_kwargs": {"enable_thinking": False},
         "messages": [
             {
                 "role": "system",
@@ -125,12 +189,13 @@ def analyze(days: int, summary: dict, source: dict, anomalies: list, records, pr
     )
     try:
         with urlopen(request, timeout=45) as response:
-            result = json.loads(response.read(2_000_001))
+            result = _resolve_completion(response, cfg["api_key"])
     except HTTPError as exc:
         # Never log or return provider response bodies, which may contain data.
-        status = 503 if exc.code in (401, 403, 429) else 502
-        raise AIServiceError("ai_provider_error", "The configured AI provider rejected or could not process the request.", status) from None
-    except (URLError, TimeoutError, OSError, json.JSONDecodeError):
+        raise _provider_error(exc.code) from None
+    except AIServiceError:
+        raise
+    except (URLError, TimeoutError, OSError, json.JSONDecodeError, ValueError):
         raise AIServiceError("ai_unavailable", "The configured AI provider is temporarily unavailable.", 502) from None
 
     try:
