@@ -846,20 +846,22 @@ function AIInsightPanel() {
             { provider: 'deepseek', model: 'DeepSeek', configured: false },
           ]).map(option => <option key={option.provider} value={option.provider}>{option.provider.toUpperCase()} · {option.model}{option.configured ? '' : ' (key missing)'}</option>)}
         </select>
-        <button className="button-primary" onClick={runAnalysis} disabled={loading || !selectedModel?.configured}>
-          <Sparkles size={15} /> {loading ? 'Analyzing…' : 'Analyze patterns'}
+        <button className="button-primary" onClick={runAnalysis} disabled={loading || !status}>
+          <Sparkles size={15} /> {loading ? 'Analyzing…' : selectedModel?.configured ? 'Analyze patterns' : 'Analyze locally'}
         </button>
         <Badge tone={selectedModel?.configured ? 'green' : 'gray'}>
-          {selectedModel?.configured ? `${provider.toUpperCase()} · ${selectedModel.model}` : `${provider.toUpperCase()} key not configured`}
+          {selectedModel?.configured ? `${provider.toUpperCase()} · ${selectedModel.model}` : 'LOCAL · no API key needed'}
         </Badge>
       </div>
       <p className="limitation-footer">
-        This action sends full-window summary statistics, up to 80 Critical/High CVEs (severity or CVSS ≥ 7), up to 20 comparison CVEs, and ML outlier IDs to the selected provider. The API key stays on the backend.
+        {selectedModel?.configured
+          ? 'This action sends full-window summary statistics, up to 80 Critical/High CVEs (severity or CVSS ≥ 7), up to 20 comparison CVEs, and ML outlier IDs to the selected provider. The API key stays on the backend.'
+          : 'Local mode analyzes full-window summary statistics, prioritized Critical/High CVEs, and ML outliers on the server. No third-party AI request is made.'}
       </p>
       {!selectedModel?.configured && (
         <div className="notice">
           <Info size={16} />
-          <div><b>Configure server-side AI access</b><span>Set the matching NVIDIA_API_KEY, KIMI_API_KEY, or DEEPSEEK_API_KEY from that provider in the backend environment, then restart Flask. Choose any configured model above.</span></div>
+          <div><b>Local analysis is available</b><span>Analyze patterns runs a deterministic evidence summary from your dataset and ML results without sending data to an AI provider. To enable generated AI commentary, configure the selected provider’s API key in the backend environment.</span></div>
         </div>
       )}
       {error && <div className="notice" role="alert"><AlertTriangle size={16} /><div><b>Analysis unavailable</b><span>{error}</span></div></div>}

@@ -17,7 +17,7 @@ from flask import Blueprint, Response, jsonify, request
 from pydantic import BaseModel, Field, ValidationError
 
 from ..analytics.core import add_priority, metrics, ml_results, safe_records
-from ..services.ai import AIServiceError, MODELS, analyze, configuration, provider_options, select_cve_examples
+from ..services.ai import AIServiceError, MODELS, analyze, analyze_locally, configuration, provider_options, select_cve_examples
 from ..services.provider import ProviderError, get_provider, get_records, mode
 
 api = Blueprint("api", __name__)
@@ -411,15 +411,18 @@ def ai_insights():
         ml = ml_results(window)
         anomalies = ml.get("anomalies", [])
         source = get_provider().status()
-        return jsonify(analyze(
-            days=days,
-            summary=summary,
-            source={"mode": source["mode"], "dataset": source["dataset"], "record_count": source["record_count"]},
-            anomalies=anomalies[:5],
-            records=ai_records,
-            provider=selected_provider,
-            cve_selection=cve_selection,
-        ))
+        analysis_source = {"mode": source["mode"], "dataset": source["dataset"], "record_count": source["record_count"]}
+        kwargs = {
+            "days": days,
+            "summary": summary,
+            "source": analysis_source,
+            "anomalies": anomalies[:5],
+            "records": ai_records,
+            "cve_selection": cve_selection,
+        }
+        if not configuration(selected_provider)["configured"]:
+            return jsonify(analyze_locally(**kwargs))
+        return jsonify(analyze(**kwargs, provider=selected_provider))
     except AIServiceError as exc:
         return _error(exc.code, exc.public_message, exc.status_code)
 

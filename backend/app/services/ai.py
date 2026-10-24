@@ -189,6 +189,67 @@ def select_cve_examples(frame, severe_limit: int = 80, context_limit: int = 20):
     return selected, selection
 
 
+def analyze_locally(days: int, summary: dict, source: dict, anomalies: list, records, cve_selection: dict | None = None) -> dict:
+    """Build a deterministic evidence summary without an external AI key."""
+    total = int(summary.get("total", 0) or 0)
+    critical = int(summary.get("critical", 0) or 0)
+    high = int(summary.get("high", 0) or 0)
+    medium = int(summary.get("medium", 0) or 0)
+    low = int(summary.get("low", 0) or 0)
+    severe = critical + high
+    share = (severe / total * 100) if total else 0
+
+    lines = [
+        f"## Window overview\nThe selected {days}-day window contains {total:,} records: {critical:,} Critical, {high:,} High, {medium:,} Medium, and {low:,} Low. Critical and High records make up {share:.1f}% of this window."
+    ]
+    average = summary.get("avg_cvss")
+    if average is not None:
+        lines.append(f"## Severity signal\nThe mean CVSS score is {float(average):.1f} across records with a score. There are {int(summary.get('new_30d', 0) or 0):,} records published in the most recent 30 days represented in this window.")
+
+    top_cwes = summary.get("top_cwe") or []
+    if top_cwes:
+        lines.append("## Common weakness categories\n" + "; ".join(f"{item['name']} ({int(item['count']):,})" for item in top_cwes[:5]))
+    top_products = summary.get("top_products") or []
+    if top_products:
+        lines.append("## Most affected products\n" + "; ".join(f"{item['name']} ({int(item['count']):,})" for item in top_products[:5]))
+
+    if records is not None and not records.empty:
+        examples = records.head(5)
+        cited = examples["cve_id"].dropna().astype(str).tolist()
+        lines.append("## Prioritized CVEs\n" + "\n".join(
+            f"- {row.cve_id}: {str(row.severity or 'Unknown')} severity, CVSS {float(row.cvss_score):.1f}. {str(row.description or '').strip()[:220]}"
+            if pd.notna(row.cvss_score) else
+            f"- {row.cve_id}: {str(row.severity or 'Unknown')} severity. {str(row.description or '').strip()[:220]}"
+            for row in examples.itertuples()
+        ))
+    else:
+        cited = []
+        lines.append("## Prioritized CVEs\nNo CVE examples were available in this time window.")
+
+    if anomalies:
+        anomaly_ids = [str(item.get("cve_id")) for item in anomalies[:5] if item.get("cve_id")]
+        if anomaly_ids:
+            lines.append("## ML outliers\nThe unsupervised pipeline flagged " + ", ".join(anomaly_ids) + ". These records differ statistically from the analyzed sample; this does not establish exploitation or malicious activity.")
+
+    if total:
+        lines.append("## Defensive follow-up\nReview the highest-scoring Critical and High CVEs against affected asset inventory, vendor advisories, and available patches. Validate product matches before prioritizing remediation.")
+    else:
+        lines.append("## Defensive follow-up\nThe selected window has no records to summarize. Confirm the data source and publication-date coverage.")
+
+    return {
+        "provider": "local",
+        "model": "Deterministic evidence summary",
+        "analysis": "\n\n".join(lines),
+        "source": source,
+        "window_days": days,
+        "record_count": total,
+        "cve_selection": cve_selection or {},
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "cited_cves": cited,
+        "notice": "Generated locally from dataset aggregates and ML outputs. No external AI provider was called. Statistical outliers and CVSS scores do not prove active exploitation.",
+    }
+
+
 def analyze(days: int, summary: dict, source: dict, anomalies: list, records, provider: str | None = None, cve_selection: dict | None = None) -> dict:
     cfg = configuration(provider)
     if not cfg["configured"]:

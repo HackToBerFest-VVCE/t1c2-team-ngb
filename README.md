@@ -77,7 +77,7 @@ The provider reads a fixed set of canonical CVE columns and bounds results using
 
 ## Optional generative analysis
 
-Put each provider's own API key in its matching backend-only variable (`NVIDIA_API_KEY`, `KIMI_API_KEY`, or `DEEPSEEK_API_KEY`) in `.env`, then restart Flask. The ML Insights page can select Nemotron, Kimi, or DeepSeek when its matching key is configured, and runs analysis only when **Analyze patterns** is clicked. The action sends summary metrics, up to 80 Critical/High CVEs (severity Critical/High or CVSS ≥ 7), plus up to 20 lower-severity comparison examples, and up to five ML anomaly candidates to the selected provider's endpoint. Do not put keys in frontend variables, source control, screenshots, or logs. See [docs/methodology.md](docs/methodology.md) for scope and limitations.
+Put each provider's own API key in its matching backend-only variable (`NVIDIA_API_KEY`, `KIMI_API_KEY`, or `DEEPSEEK_API_KEY`) in `.env`, then restart Flask to enable generated AI commentary. Without a key, **Analyze locally** still produces a deterministic, evidence-grounded summary from the active dataset and ML outputs; it makes no third-party AI request. With a key configured, the ML Insights page can select Nemotron, Kimi, or DeepSeek, and sends bounded summary metrics and CVE examples only after **Analyze patterns** is clicked. Do not put keys in frontend variables, source control, screenshots, or logs. See [docs/methodology.md](docs/methodology.md) for scope and limitations.
 
 ## API
 
