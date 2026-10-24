@@ -28,6 +28,9 @@ __version__ = "1.0.0"
 
 # ── Process-level cache for priority-scored records ───────────────────
 _PRIORITY_CACHE: tuple[int, pd.DataFrame] | None = None
+_SUMMARY_CACHE: tuple[int, int, dict] | None = None
+_TRENDS_CACHE: dict[tuple[int, int, int], dict] = {}
+_DATA_QUALITY_CACHE: tuple[int, dict] | None = None
 
 
 # ── Helpers ───────────────────────────────────────────────────────────
@@ -114,14 +117,26 @@ def summary():
 
     Replaces two separate API calls (``/metrics`` + ``/vulnerabilities``)
     with one, cutting Overview page load time roughly in half.
+    Cached by dataset identity for sub-millisecond repeat responses.
     """
+    global _SUMMARY_CACHE
     frame = _records()
+    frame_id = id(frame)
+    cache_minute = int(time.time() // 60)
+    if (
+        _SUMMARY_CACHE is not None
+        and _SUMMARY_CACHE[:2] == (frame_id, cache_minute)
+    ):
+        return jsonify(_SUMMARY_CACHE[2])
+
     m = metrics(frame)
     recent = frame.sort_values("published", ascending=False, na_position="last").head(6)
-    return jsonify({
+    payload = {
         "metrics": m,
         "recent": _public_rows(recent),
-    })
+    }
+    _SUMMARY_CACHE = (frame_id, cache_minute, payload)
+    return jsonify(payload)
 
 
 # ── Vulnerabilities ───────────────────────────────────────────────────
@@ -277,8 +292,8 @@ def vulnerability(cve_id: str):
 @api.get("/trends")
 def trends():
     """Time-series publication and severity trends."""
-    frame = _records().dropna(subset=["published"])
-    all_dated = frame
+    raw_records = _records()
+    frame_id = id(raw_records)
 
     days_str = request.args.get("days", "365")
     try:
@@ -289,6 +304,13 @@ def trends():
         return _error(
             "invalid_parameter", "days must be between 1 and 3650.", 400
         )
+
+    cache_key = (frame_id, days, int(time.time() // 60))
+    if cache_key in _TRENDS_CACHE:
+        return jsonify(_TRENDS_CACHE[cache_key])
+
+    frame = raw_records.dropna(subset=["published"])
+    all_dated = frame
 
     end = pd.Timestamp.now(tz="UTC")
     start = end - pd.Timedelta(days=days)
@@ -317,7 +339,7 @@ def trends():
     coverage_start = all_dated.published.min() if not all_dated.empty else None
     coverage_end = all_dated.published.max() if not all_dated.empty else None
     coverage_limited = bool(coverage_start is not None and coverage_start > start)
-    return jsonify({
+    payload = {
         "days": days,
         "items": _public_rows(ts),
         "count": int(len(frame)),
@@ -343,7 +365,11 @@ def trends():
             "available source records; empty months outside source date coverage "
             "are unknown, not verified zero activity."
         ),
-    })
+    }
+    _TRENDS_CACHE[cache_key] = payload
+    if len(_TRENDS_CACHE) > 24:
+        del _TRENDS_CACHE[next(iter(_TRENDS_CACHE))]
+    return jsonify(payload)
 
 
 @api.get("/ai/status")
@@ -486,7 +512,11 @@ def training_report():
 @api.get("/data-quality")
 def data_quality():
     """Schema inspection and data-completeness summary."""
+    global _DATA_QUALITY_CACHE
     frame = get_records()
+    frame_id = id(frame)
+    if _DATA_QUALITY_CACHE is not None and _DATA_QUALITY_CACHE[0] == frame_id:
+        return jsonify(_DATA_QUALITY_CACHE[1])
 
     fields = []
     for col in frame.columns:
@@ -503,7 +533,7 @@ def data_quality():
     if frame.published.notna().any():
         last_pub = frame.published.max().isoformat()
 
-    return jsonify({
+    payload = {
         "source": get_provider().status(),
         "record_count": len(frame),
         "fields": fields,
@@ -513,7 +543,9 @@ def data_quality():
             "numeric CVSS parsing, uppercase CVE/severity, "
             "absent optional columns represented as null."
         ),
-    })
+    }
+    _DATA_QUALITY_CACHE = (frame_id, payload)
+    return jsonify(payload)
 
 
 # ── Reports ───────────────────────────────────────────────────────────

@@ -112,9 +112,18 @@ def add_priority(frame: pd.DataFrame) -> pd.DataFrame:
 
 # ── Aggregate metrics ─────────────────────────────────────────────────
 
+_metrics_cache: dict[tuple[str, int], dict] = {}
+
+
 def metrics(frame: pd.DataFrame) -> dict[str, Any]:
     """Compute top-level dashboard metrics from the active dataset."""
+    fp = _frame_fingerprint(frame)
     now = pd.Timestamp.now(tz="UTC")
+    # The recent-publication count is a rolling window, so expire cached
+    # metrics at minute boundaries even when the underlying dataset is static.
+    cache_key = (fp, int(now.timestamp() // 60))
+    if cache_key in _metrics_cache:
+        return _metrics_cache[cache_key]
 
     # Severity counts
     sev = frame.severity.value_counts().to_dict() if not frame.empty else {}
@@ -155,7 +164,7 @@ def metrics(frame: pd.DataFrame) -> dict[str, Any]:
     if not frame.empty and frame.cvss_score.notna().any():
         avg_cvss = round(float(frame.cvss_score.dropna().mean()), 1)
 
-    return {
+    res = {
         "total": int(len(frame)),
         "critical": int(sev.get("CRITICAL", 0)),
         "high": int(sev.get("HIGH", 0)),
@@ -182,6 +191,11 @@ def metrics(frame: pd.DataFrame) -> dict[str, Any]:
             "rolling 30-day UTC window."
         ),
     }
+    _metrics_cache[cache_key] = res
+    if len(_metrics_cache) > 8:
+        oldest = next(iter(_metrics_cache))
+        del _metrics_cache[oldest]
+    return res
 
 
 # ── ML analysis (cached per dataset snapshot) ─────────────────────────
