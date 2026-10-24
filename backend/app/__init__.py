@@ -15,6 +15,15 @@ __version__ = "1.0.0"
 
 def create_app(test_config=None):
     """Create and configure the Flask application."""
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+        root = Path(__file__).resolve().parents[2]
+        load_dotenv(root / ".env")
+        load_dotenv(root / "backend" / ".env")
+    except Exception:
+        pass
+
     frontend_dist = Path(__file__).resolve().parents[2] / "frontend" / "dist"
     app = Flask(__name__, static_folder=None)
     app.config.from_mapping(

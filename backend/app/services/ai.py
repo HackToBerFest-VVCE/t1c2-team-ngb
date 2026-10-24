@@ -313,7 +313,8 @@ def analyze(days: int, summary: dict, source: dict, anomalies: list, records, pr
         raise AIServiceError("ai_unavailable", "The configured AI provider is temporarily unavailable.", 502) from None
 
     try:
-        text = result["choices"][0]["message"]["content"]
+        msg = result["choices"][0]["message"]
+        text = msg.get("content") or msg.get("reasoning_content") or ""
         if not isinstance(text, str) or not text.strip():
             raise ValueError("empty completion")
     except (KeyError, IndexError, TypeError, ValueError):
