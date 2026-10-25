@@ -185,7 +185,11 @@ def contributions():
         training = training_report().get_json()
         return jsonify({"available": True, "events": events, "model_benchmarks": training, **summarize_events(events)})
     except AuditUnavailable:
-        return jsonify({"available": False, "reason": "Audit table is unavailable; apply snowflake/contributions.sql and grant the audit role access.", "events": [], "members": [], "peer_reviews": [], "evaluations": []})
+        return jsonify({
+            "available": False,
+            "reason": "Audit table is unavailable; apply snowflake/contributions.sql and grant the audit role access.",
+            "events": [], "members": [], "peer_reviews": [], "evaluations": []
+        })
 
 
 @api.post("/contributions")

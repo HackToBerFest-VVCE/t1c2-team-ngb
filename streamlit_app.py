@@ -7,6 +7,15 @@ variables; Snowflake-native deployments use the active session.
 
 from __future__ import annotations
 
+from pathlib import Path
+try:
+    from dotenv import load_dotenv
+    _root = Path(__file__).resolve().parent
+    load_dotenv(_root / ".env")
+    load_dotenv(_root / "backend" / ".env")
+except Exception:
+    pass
+
 import os
 import re
 
@@ -48,6 +57,9 @@ def _session():
     elif os.getenv("SNOWFLAKE_PRIVATE_KEY_PATH"):
         cfg["private_key_file"] = os.environ["SNOWFLAKE_PRIVATE_KEY_PATH"]
         cfg["authenticator"] = "SNOWFLAKE_JWT"
+        passphrase = os.getenv("SNOWFLAKE_PRIVATE_KEY_PASSPHRASE", "").strip()
+        if passphrase:
+            cfg["private_key_file_pwd"] = passphrase
     else:
         raise RuntimeError("Set a password or key-pair credential in the server environment.")
     if os.getenv("SNOWFLAKE_ROLE"):
@@ -61,6 +73,7 @@ def _safe_table(value: str) -> str:
     return value
 
 
+is_live_snowflake = False
 try:
     session = _session()
     table = _safe_table(os.getenv("SNOWFLAKE_TABLE", "THREATLENS_DB.THREATLENS.VULNERABILITIES"))
@@ -74,10 +87,16 @@ try:
         col("PUBLISHED").desc_nulls_last(),
         col("CVE_ID").asc(),
     ).limit(limit).to_pandas()
+    is_live_snowflake = True
 except Exception:
-    st.error("Snowflake data is unavailable. Check connection settings, table access, and warehouse status.")
-    st.info("In Snowflake Streamlit, use the app's active session. Locally, install `requirements-streamlit.txt` and configure backend-only Snowflake environment variables.")
-    st.stop()
+    st.info("Live Snowflake Snowpark connection not active; falling back to transparent bundled NVD catalog.")
+    from backend.app.services.provider import DemoProvider
+    table = "NVD bundled snapshot (DEMO)"
+    raw_data = DemoProvider().records().head(1000).copy()
+    raw_data.columns = [c.upper() for c in raw_data.columns]
+    if "PRIORITY_SCORE" in raw_data.columns and "TRIAGE_SCORE" not in raw_data.columns:
+        raw_data["TRIAGE_SCORE"] = raw_data["PRIORITY_SCORE"]
+    data = raw_data
 
 if data.empty:
     st.warning("The configured source table returned no records.")

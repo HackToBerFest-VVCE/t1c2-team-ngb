@@ -86,28 +86,60 @@ def _connection():
         raise AuditUnavailable("Audit Snowflake connection failed") from exc
 
 
-def list_events(limit: int = 200) -> list[dict]:
-    if not audit_configured():
-        raise AuditUnavailable("Audit storage is not configured")
-    conn = _connection()
+import json
+from pathlib import Path
+from threading import Lock
+
+ROOT = Path(__file__).resolve().parents[3]
+LOCAL_AUDIT_FILE = ROOT / "data" / "audit_events.json"
+_LOCAL_LOCK = Lock()
+
+
+def _load_local_events() -> list[dict]:
+    if not LOCAL_AUDIT_FILE.exists():
+        return []
     try:
-        cur = conn.cursor()
+        with open(LOCAL_AUDIT_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            if isinstance(data, list):
+                return data
+    except Exception:
+        pass
+    return []
+
+
+def _save_local_events(events: list[dict]) -> None:
+    LOCAL_AUDIT_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(LOCAL_AUDIT_FILE, "w", encoding="utf-8") as f:
+        json.dump(events, f, indent=2, default=str)
+
+
+def list_events(limit: int = 200) -> list[dict]:
+    if audit_configured():
+        conn = _connection()
         try:
-            cur.execute(
-                f"SELECT EVENT_ID, EVENT_TYPE, PROJECT_ID, ACTOR, EVENT_DATE, "
-                f"CONTRIBUTION_TYPE, POINTS, REVIEWEE, REVIEW_RATING, ARTIFACT_URL, "
-                f"METRIC_NAME, METRIC_VALUE, DETAILS, CREATED_AT "
-                f"FROM {_table()} ORDER BY CREATED_AT DESC LIMIT %s",
-                (max(1, min(int(limit), 500)),),
-            )
-            columns = [item[0].lower() for item in cur.description]
-            return [dict(zip(columns, row)) for row in cur.fetchall()]
+            cur = conn.cursor()
+            try:
+                cur.execute(
+                    f"SELECT EVENT_ID, EVENT_TYPE, PROJECT_ID, ACTOR, EVENT_DATE, "
+                    f"CONTRIBUTION_TYPE, POINTS, REVIEWEE, REVIEW_RATING, ARTIFACT_URL, "
+                    f"METRIC_NAME, METRIC_VALUE, DETAILS, CREATED_AT "
+                    f"FROM {_table()} ORDER BY CREATED_AT DESC LIMIT %s",
+                    (max(1, min(int(limit), 500)),),
+                )
+                columns = [item[0].lower() for item in cur.description]
+                return [dict(zip(columns, row)) for row in cur.fetchall()]
+            finally:
+                cur.close()
+        except Exception as exc:
+            raise AuditUnavailable("Audit table could not be queried") from exc
         finally:
-            cur.close()
-    except Exception as exc:
-        raise AuditUnavailable("Audit table could not be queried") from exc
-    finally:
-        conn.close()
+            conn.close()
+
+    with _LOCAL_LOCK:
+        events = _load_local_events()
+        events.sort(key=lambda x: str(x.get("created_at") or ""), reverse=True)
+        return events[:max(1, min(int(limit), 500))]
 
 
 def append_event(event: dict, token: str | None) -> str:
@@ -116,31 +148,53 @@ def append_event(event: dict, token: str | None) -> str:
         raise PermissionError("A valid server-side audit write token is required")
     if not audit_configured():
         raise AuditUnavailable("Audit storage is not configured")
-    event_id = str(uuid4())
-    conn = _connection()
-    try:
-        cur = conn.cursor()
+    if audit_configured():
+        conn = _connection()
         try:
-            cur.execute(
-                f"INSERT INTO {_table()} (EVENT_ID, EVENT_TYPE, PROJECT_ID, ACTOR, "
-                f"EVENT_DATE, CONTRIBUTION_TYPE, POINTS, REVIEWEE, REVIEW_RATING, "
-                f"ARTIFACT_URL, METRIC_NAME, METRIC_VALUE, DETAILS, CREATED_AT) "
-                f"VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
-                (
-                    event_id, event["event_type"], event["project_id"], event["actor"],
-                    event.get("event_date") or datetime.now(timezone.utc).date().isoformat(),
-                    event.get("contribution_type"), event.get("points"), event.get("reviewee"),
-                    event.get("review_rating"), event.get("artifact_url"),
-                    event.get("metric_name"), event.get("metric_value"), event.get("details"),
-                    datetime.now(timezone.utc).replace(tzinfo=None),
-                ),
-            )
-            conn.commit()
+            cur = conn.cursor()
+            try:
+                cur.execute(
+                    f"INSERT INTO {_table()} (EVENT_ID, EVENT_TYPE, PROJECT_ID, ACTOR, "
+                    f"EVENT_DATE, CONTRIBUTION_TYPE, POINTS, REVIEWEE, REVIEW_RATING, "
+                    f"ARTIFACT_URL, METRIC_NAME, METRIC_VALUE, DETAILS, CREATED_AT) "
+                    f"VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                    (
+                        event_id, event["event_type"], event["project_id"], event["actor"],
+                        event.get("event_date") or datetime.now(timezone.utc).date().isoformat(),
+                        event.get("contribution_type"), event.get("points"), event.get("reviewee"),
+                        event.get("review_rating"), event.get("artifact_url"),
+                        event.get("metric_name"), event.get("metric_value"), event.get("details"),
+                        datetime.now(timezone.utc).replace(tzinfo=None),
+                    ),
+                )
+                conn.commit()
+            finally:
+                cur.close()
         finally:
-            cur.close()
-    finally:
-        conn.close()
-    return event_id
+            conn.close()
+        return event_id
+
+    with _LOCAL_LOCK:
+        events = _load_local_events()
+        record = {
+            "event_id": event_id,
+            "event_type": event["event_type"],
+            "project_id": event["project_id"],
+            "actor": event["actor"],
+            "event_date": event.get("event_date") or datetime.now(timezone.utc).date().isoformat(),
+            "contribution_type": event.get("contribution_type"),
+            "points": event.get("points"),
+            "reviewee": event.get("reviewee"),
+            "review_rating": event.get("review_rating"),
+            "artifact_url": event.get("artifact_url"),
+            "metric_name": event.get("metric_name"),
+            "metric_value": event.get("metric_value"),
+            "details": event.get("details"),
+            "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S"),
+        }
+        events.insert(0, record)
+        _save_local_events(events)
+        return event_id
 
 
 def summarize_events(events: list[dict]) -> dict:
