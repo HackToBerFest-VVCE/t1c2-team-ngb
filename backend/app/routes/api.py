@@ -557,7 +557,7 @@ def ai_insights():
     selected_provider = body.get("provider")
     if selected_provider is not None:
         if not isinstance(selected_provider, str) or selected_provider.strip().lower() not in MODELS:
-            return _error("invalid_parameter", "provider must be nvidia, kimi, deepseek, or cortex.", 400)
+            return _error("invalid_parameter", "provider must be cortex or nvidia.", 400)
         selected_provider = selected_provider.strip().lower()
     try:
         frame = _records().dropna(subset=["published"])

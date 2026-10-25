@@ -12,14 +12,10 @@ from urllib.request import Request, urlopen
 
 ENDPOINTS = {
     "nvidia": "https://integrate.api.nvidia.com/v1/chat/completions",
-    "kimi": "https://api.moonshot.ai/v1/chat/completions",
-    "deepseek": "https://api.deepseek.com/chat/completions",
 }
 MODELS = {
-    "nvidia": ("NVIDIA_API_KEY", "nvidia/nemotron-3.5-lightning-30b-a3b"),
-    "kimi": ("KIMI_API_KEY", "kimi-k2.5"),
-    "deepseek": ("DEEPSEEK_API_KEY", "deepseek-flash"),
     "cortex": ("", "llama3.1-8b"),
+    "nvidia": ("NVIDIA_API_KEY", "nvidia/nemotron-3.5-lightning-30b-a3b"),
 }
 
 
@@ -33,7 +29,7 @@ class AIServiceError(RuntimeError):
 
 def _provider_error(status: int, provider: str) -> AIServiceError:
     """Return a useful, sanitized message without exposing provider bodies."""
-    provider_name = {"nvidia": "NVIDIA NIM", "kimi": "Moonshot Kimi", "deepseek": "DeepSeek"}.get(provider, "AI provider")
+    provider_name = {"nvidia": "NVIDIA NIM", "cortex": "Snowflake Cortex"}.get(provider, "AI provider")
     key_name = MODELS.get(provider, MODELS["nvidia"])[0]
     messages = {
         400: ("ai_request_rejected", f"{provider_name} rejected the analysis request. Try a shorter analysis window."),
@@ -97,9 +93,9 @@ def _resolve_completion(response, api_key: str, provider: str) -> dict:
 
 def configuration(provider: str | None = None) -> dict:
     """Resolve provider/model settings without ever returning a secret."""
-    selected = (provider or os.getenv("AI_PROVIDER", "nvidia")).strip().lower()
+    selected = (provider or os.getenv("AI_PROVIDER", "cortex")).strip().lower()
     if selected not in MODELS:
-        selected = "nvidia"
+        selected = "cortex"
     if selected == "cortex":
         from .provider import get_provider, SnowflakeProvider, ProviderError
         snowflake = get_provider()
@@ -123,8 +119,6 @@ def configuration(provider: str | None = None) -> dict:
     key_name, default_model = MODELS[selected]
     api_key = os.getenv(key_name, "").strip()
     configured = bool(api_key)
-    if selected in ("kimi", "deepseek") and api_key.startswith("nvapi-"):
-        configured = False
     return {
         "configured": configured,
         "provider": selected,
@@ -145,8 +139,6 @@ def provider_options() -> list[dict]:
             continue
         key = os.getenv(key_name, "").strip()
         configured = bool(key)
-        if name in ("kimi", "deepseek") and key.startswith("nvapi-"):
-            configured = False
         opts.append({"provider": name, "model": model, "configured": configured})
     return opts
 
@@ -341,14 +333,6 @@ def analyze(days: int, summary: dict, source: dict, anomalies: list, records, pr
             "ai_not_configured",
             f"Add a rotated token to {cfg['key_name']} in the backend environment, then restart Flask.",
         )
-    if cfg["provider"] in ("kimi", "deepseek") and cfg["api_key"].startswith("nvapi-"):
-        portal = "https://platform.deepseek.com" if cfg["provider"] == "deepseek" else "https://platform.moonshot.cn"
-        name = "DeepSeek" if cfg["provider"] == "deepseek" else "Moonshot Kimi"
-        raise AIServiceError(
-            "ai_key_provider_mismatch",
-            f"{name} requires an API key from {portal} (starts with 'sk-'). The configured {cfg['key_name']} is an NVIDIA NIM key ('nvapi-...'). To run analysis with your NVIDIA key, select NVIDIA in the model dropdown.",
-            400,
-        )
     payload = _clean_payload(days, summary, source, anomalies, records, cve_selection)
     body = {
         "model": cfg["model"],
@@ -377,12 +361,7 @@ def analyze(days: int, summary: dict, source: dict, anomalies: list, records, pr
             },
         ],
     }
-    if cfg["provider"] == "nvidia":
-        body.update(temperature=0.2, chat_template_kwargs={"enable_thinking": False})
-    elif cfg["provider"] == "kimi":
-        body.update(temperature=0.6, top_p=0.95, thinking={"type": "disabled"})
-    else:
-        body.update(temperature=0.2, thinking={"type": "disabled"})
+    body.update(temperature=0.2, chat_template_kwargs={"enable_thinking": False})
     request = Request(
         cfg["endpoint"],
         data=json.dumps(body).encode("utf-8"),

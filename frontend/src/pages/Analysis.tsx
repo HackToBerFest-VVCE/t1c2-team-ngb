@@ -890,12 +890,12 @@ function AIInsightPanel() {
   const [status, setStatus] = useState<AIStatus | null>(null);
   const [result, setResult] = useState<AIInsights | null>(null);
   const [days, setDays] = useState(90);
-  const [provider, setProvider] = useState('nvidia');
+  const [provider, setProvider] = useState('cortex');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    api<AIStatus>('/ai/status').then(value => { setStatus(value); setProvider(value.provider || 'nvidia'); }).catch(() => setStatus(null));
+    api<AIStatus>('/ai/status').then(value => { setStatus(value); setProvider(value.provider || 'cortex'); }).catch(() => setStatus(null));
   }, []);
 
   const selectedModel = status?.providers?.find(option => option.provider === provider);
@@ -933,10 +933,8 @@ function AIInsightPanel() {
         <label className="pills-label" htmlFor="ai-provider">Model provider</label>
         <select id="ai-provider" className="button-secondary" value={provider} onChange={e => setProvider(e.target.value)}>
           {(status?.providers ?? [
-            { provider: 'nvidia', model: 'Nemotron', configured: false },
-            { provider: 'kimi', model: 'Kimi', configured: false },
-            { provider: 'deepseek', model: 'DeepSeek', configured: false },
             { provider: 'cortex', model: 'llama3.1-8b', configured: false },
+            { provider: 'nvidia', model: 'Nemotron', configured: false },
           ]).map(option => <option key={option.provider} value={option.provider}>{option.provider.toUpperCase()} · {option.model}{option.configured ? '' : option.provider === 'cortex' ? ' (Snowflake connection required)' : ' (key missing)'}</option>)}
         </select>
         <button className="button-primary" onClick={runAnalysis} disabled={loading || !status}>
@@ -950,20 +948,18 @@ function AIInsightPanel() {
         {selectedModel?.configured
           ? provider === 'cortex'
             ? 'This action sends a bounded summary and selected public CVE records to Snowflake Cortex in your configured account. Snowflake usage and model availability rules apply.'
-            : 'This action sends full-window summary statistics, up to 80 Critical/High CVEs (severity or CVSS ≥ 7), up to 20 comparison CVEs, and ML outlier IDs to the selected provider. The API key stays on the backend.'
+            : 'This action sends full-window summary statistics, up to 80 Critical/High CVEs (severity or CVSS ≥ 7), up to 20 comparison CVEs, and ML outlier IDs to NVIDIA NIM. The API key stays on the backend.'
           : 'Local mode analyzes full-window summary statistics, prioritized Critical/High CVEs, and ML outliers on the server. No third-party AI request is made.'}
       </p>
       {!selectedModel?.configured && (
         <div className="notice">
           <Info size={16} />
           <div>
-            <b>{provider === 'cortex' ? 'Snowflake connection required' : provider === 'nvidia' ? 'NVIDIA NIM key required' : `${provider.toUpperCase()} native key required`}</b>
+            <b>{provider === 'cortex' ? 'Snowflake connection required' : 'NVIDIA NIM key required'}</b>
             <span>
               {provider === 'cortex'
                 ? 'Configure the backend with DATA_SOURCE=snowflake and a working Snowflake identity. The Analyze action falls back to deterministic local analysis when Cortex is unavailable.'
-                : provider === 'nvidia'
-                ? 'Configure NVIDIA_API_KEY from build.nvidia.com (starts with nvapi-).'
-                : `${provider.toUpperCase()} requires a native API key from ${provider === 'deepseek' ? 'platform.deepseek.com' : 'platform.moonshot.cn'} (starts with sk-). To run analysis using your NVIDIA NIM token, select NVIDIA above.`}
+                : 'Configure NVIDIA_API_KEY from build.nvidia.com (starts with nvapi-).'}
             </span>
           </div>
         </div>
