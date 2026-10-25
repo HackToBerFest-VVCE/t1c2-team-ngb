@@ -69,7 +69,7 @@
   <rect x="686" y="665" width="324" height="77" rx="14" fill="#211f2c" stroke="#9280c6"/><text x="706" y="695" class="tag" fill="#c6b6ff">DEMO PROVIDER</text><text x="706" y="722" class="small">Bundled NVD JSON / Parquet catalog</text>
   <rect x="686" y="758" width="324" height="77" rx="14" fill="#28211e" stroke="#e18b45"/><text x="706" y="788" class="tag" fill="#ffb66a">OPTIONAL SNOWFLAKE PROVIDER</text><text x="706" y="815" class="small">CVE view • bounded, read-only query</text>
   <path d="M654 755v-51h25m-25 51v42h25" fill="none" stroke="#f5a04c" stroke-width="2.5" marker-end="url(#arrow)"/>
-  <text x="66" y="885" class="tiny muted">Optional side workflows: NVD/Hugging Face discovery • Snowpark transforms • Cortex COMPLETE • grouped held-out task training.</text>
+  <text x="66" y="885" class="tiny muted">Optional side workflows: NVD/Hugging Face discovery • Snowpark transforms • AI_COMPLETE • grouped held-out task training.</text>
   <text x="66" y="912" class="tiny muted">Audit writes use a separate identity • read paths remain bounded • live table is NVD-origin data, not a Marketplace listing.</text>
 
   <!-- Technology stack -->

@@ -116,7 +116,7 @@ def configuration(provider: str | None = None) -> dict:
             "configured": configured,
             "provider": selected,
             "model": model,
-            "endpoint": "Snowflake Cortex COMPLETE",
+            "endpoint": "Snowflake AI_COMPLETE",
             "api_key": "",
             "key_name": "Snowflake Cortex and a configured Snowflake connection",
         }

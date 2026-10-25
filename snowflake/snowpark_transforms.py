@@ -32,7 +32,7 @@ def transform_vulnerabilities(session, table_name: str, register_udf: bool = Tru
     if not _TABLE_RE.fullmatch(table_name):
         raise ValueError("table_name must be a one-to-three-part Snowflake identifier")
 
-    from snowflake.snowpark.functions import call_function, col, upper, trim, when, lit, coalesce
+    from snowflake.snowpark.functions import call_function, col, upper, trim, when, lit, coalesce, current_timestamp, datediff, greatest
     from snowflake.snowpark.types import StringType
 
     source = session.table(table_name)
@@ -57,12 +57,14 @@ def transform_vulnerabilities(session, table_name: str, register_udf: bool = Tru
         # SQL-only fallback avoids UDF creation grants; it standardizes whitespace/case.
         normalized_cwe = upper(trim(cwe_col))
 
-    score = call_function("TRY_TO_DOUBLE", col("CVSS_SCORE"))
+    # Cast to STRING first so TRY_TO_* also handles already typed numeric and
+    # timestamp columns (TRY_TO_TIMESTAMP_TZ(TIMESTAMP_TZ) is not valid SQL).
+    score = call_function("TRY_TO_DOUBLE", col("CVSS_SCORE").cast("STRING"))
     cleaned = source.select(
         upper(trim(col("CVE_ID").cast("STRING"))).alias("CVE_ID"),
         trim(coalesce(col("DESCRIPTION").cast("STRING"), lit(""))).alias("DESCRIPTION"),
-        call_function("TRY_TO_TIMESTAMP_TZ", col("PUBLISHED")).alias("PUBLISHED"),
-        call_function("TRY_TO_TIMESTAMP_TZ", col("LAST_MODIFIED")).alias("LAST_MODIFIED") if "LAST_MODIFIED" in available else lit(None).cast("TIMESTAMP_TZ").alias("LAST_MODIFIED"),
+        call_function("TRY_TO_TIMESTAMP_TZ", col("PUBLISHED").cast("STRING")).alias("PUBLISHED"),
+        call_function("TRY_TO_TIMESTAMP_TZ", col("LAST_MODIFIED").cast("STRING")).alias("LAST_MODIFIED") if "LAST_MODIFIED" in available else lit(None).cast("TIMESTAMP_TZ").alias("LAST_MODIFIED"),
         when(score.between(0.0, 10.0), score).otherwise(lit(None).cast("DOUBLE")).alias("CVSS_SCORE"),
         upper(trim(coalesce(col("SEVERITY").cast("STRING"), lit("UNKNOWN")))).alias("SEVERITY"),
         normalized_cwe.alias("CWE"),
@@ -70,9 +72,19 @@ def transform_vulnerabilities(session, table_name: str, register_udf: bool = Tru
         col("SOURCE_URL").cast("STRING").alias("SOURCE_URL") if "SOURCE_URL" in available else lit(None).cast("STRING").alias("SOURCE_URL"),
     ).filter(col("CVE_ID").rlike(r"^CVE-[0-9]{4}-[0-9]{4,}$"))
 
-    # The separate score is deliberately named TRIAGE_SCORE to distinguish it from CVSS.
+    # Match the app's disclosed 80/20 CVSS + 365-day recency heuristic.
+    # The score is deliberately named TRIAGE_SCORE to distinguish it from CVSS.
+    age_days = greatest(lit(0), datediff("day", col("PUBLISHED"), current_timestamp()))
+    recency = when(
+        col("PUBLISHED").is_null(), lit(0.0)
+    ).otherwise(greatest(lit(0.0), lit(1.0) - (age_days.cast("DOUBLE") / lit(365.0))) * lit(20.0))
+    cvss_component = when(
+        col("CVSS_SCORE").is_null(), lit(0.0)
+    ).otherwise(col("CVSS_SCORE") / lit(10.0) * lit(80.0))
     return cleaned.with_column(
         "TRIAGE_SCORE",
-        when(col("CVSS_SCORE").is_null(), lit(None).cast("DOUBLE"))
-        .otherwise((col("CVSS_SCORE") * lit(10.0)).cast("DOUBLE")),
+        when(
+            col("CVSS_SCORE").is_null() & col("PUBLISHED").is_null(),
+            lit(None).cast("DOUBLE"),
+        ).otherwise((cvss_component + recency).cast("DOUBLE")),
     )

@@ -18,7 +18,7 @@ ThreatLens AI is Team Nova's flagship open-source cybersecurity implementation: 
 - CoCo was unavailable; actual use is not claimed. See `docs/coco-workflow.md`.
 - Project Studio provides a dataset discovery catalog, vulnerability/code-flaw/intrusion-detection templates, goal/metric scope validation, and browser-local project briefs.
 - Optional Snowpark transformations run canonical CVE normalization and a separately labeled triage heuristic in Snowflake compute; see [`snowflake/snowpark_transforms.py`](snowflake/snowpark_transforms.py).
-- Optional Snowflake Cortex `COMPLETE` adds bounded in-database LLM analysis. Cortex failures return deterministic local analysis. The default is `llama3.1-8b`; model support varies by account, region, and lifecycle.
+- Optional Snowflake `AI_COMPLETE` adds bounded in-database LLM analysis. Service failures return deterministic local analysis. The default is `llama3.1-8b`; model support varies by account, region, and lifecycle.
 - Audit & Traceability reads append-only contribution, peer-review, and evaluation events from Snowflake when a separate audit identity/table is configured. No scores are fabricated when the ledger is unavailable.
 - `streamlit_app.py` is a native Snowflake Streamlit app; install [`requirements-streamlit.txt`](requirements-streamlit.txt) for local use.
 
@@ -89,7 +89,7 @@ The provider reads a fixed set of canonical CVE columns and bounds results using
 
 ### Cortex and Snowpark
 
-Snowflake Cortex is an optional choice in **ML Insights → AI Pattern Analysis** when `DATA_SOURCE=snowflake` and the configured warehouse/role can call Cortex. It sends a bounded sample of public CVE fields to `SNOWFLAKE.CORTEX.COMPLETE`; on service, entitlement, model, or account errors, the API returns deterministic local analysis and labels the fallback. The default model is `llama3.1-8b`; availability varies by region and account. The blueprint's `mistral-large2` and `llama3.1-70b` examples are now legacy for new integrations, so configure only models available to the account. See [Snowflake model availability](https://docs.snowflake.com/en/user-guide/snowflake-cortex/model-availability).
+Snowflake AI is an optional choice in **ML Insights → AI Pattern Analysis** when `DATA_SOURCE=snowflake` and the configured warehouse/role can call Cortex. It sends a bounded sample of public CVE fields to `AI_COMPLETE`; on service, entitlement, model, or account errors, the API returns deterministic local analysis and labels the fallback. Direct account verification found that this account's trial does not currently enable `AI_COMPLETE`, so live generated Cortex results are unavailable here. Snowflake remains the source of truth for CVE data and the code keeps the graceful local fallback. The default model is `llama3.1-8b`; availability varies by region and account. The blueprint's `mistral-large2` and `llama3.1-70b` examples are now legacy for new integrations, so configure only models available to the account. See [AI_COMPLETE](https://docs.snowflake.com/en/sql-reference/functions/ai_complete) and [Snowflake model availability](https://docs.snowflake.com/en/user-guide/snowflake-cortex/model-availability).
 
 Install the optional dependency set for Snowpark transforms and local Streamlit:
 

@@ -222,7 +222,7 @@ class SnowflakeProvider:
         try:
             cur = conn.cursor()
             try:
-                cur.execute("SELECT SNOWFLAKE.CORTEX.COMPLETE(%s, %s)", (model, prompt))
+                cur.execute("SELECT AI_COMPLETE(%s, %s)", (model, prompt))
                 row = cur.fetchone()
                 if not row or not isinstance(row[0], str) or not row[0].strip():
                     raise ProviderError("Cortex returned an empty completion")

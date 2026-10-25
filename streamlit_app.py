@@ -64,11 +64,16 @@ def _safe_table(value: str) -> str:
 try:
     session = _session()
     table = _safe_table(os.getenv("SNOWFLAKE_TABLE", "THREATLENS_DB.THREATLENS.VULNERABILITIES"))
-    frame = session.table(table).select(
-        "CVE_ID", "DESCRIPTION", "PUBLISHED", "CVSS_SCORE", "SEVERITY", "CWE", "AFFECTED_PRODUCTS", "SOURCE_URL"
-    )
+    from snowflake.snowpark_transforms import transform_vulnerabilities
+    from snowflake.snowpark.functions import col
+    frame = transform_vulnerabilities(session, table, register_udf=False)
     limit = min(max(int(os.getenv("SNOWFLAKE_MAX_ROWS", "500000")), 1), 1_000_000)
-    data = frame.limit(limit).to_pandas()
+    data = frame.sort(
+        col("TRIAGE_SCORE").desc_nulls_last(),
+        col("CVSS_SCORE").desc_nulls_last(),
+        col("PUBLISHED").desc_nulls_last(),
+        col("CVE_ID").asc(),
+    ).limit(limit).to_pandas()
 except Exception:
     st.error("Snowflake data is unavailable. Check connection settings, table access, and warehouse status.")
     st.info("In Snowflake Streamlit, use the app's active session. Locally, install `requirements-streamlit.txt` and configure backend-only Snowflake environment variables.")
@@ -105,10 +110,11 @@ critical.metric("Critical", f"{filtered['SEVERITY'].fillna('').str.upper().eq('C
 mean.metric("Mean source CVSS", f"{filtered['CVSS_SCORE'].mean():.1f}" if filtered["CVSS_SCORE"].notna().any() else "—")
 
 st.subheader("Priority drill-down")
-st.caption("Ordered by source CVSS Base Score. Missing source scores remain unscored; CVSS measures severity, not organization-specific risk or active exploitation.")
-display = filtered.sort_values(["CVSS_SCORE", "PUBLISHED", "CVE_ID"], ascending=[False, False, True], na_position="last").head(100)
+st.caption("Snowpark cleanses and normalizes the source in Snowflake, then computes a separately named TRIAGE_SCORE (80% CVSS + 20% 365-day recency). The source CVSS remains unchanged; it measures severity, not organization-specific risk or active exploitation.")
+display = filtered.sort_values(["TRIAGE_SCORE", "CVSS_SCORE", "PUBLISHED", "CVE_ID"], ascending=[False, False, False, True], na_position="last").head(100)
 st.dataframe(display, use_container_width=True, hide_index=True, column_config={
     "SOURCE_URL": st.column_config.LinkColumn("NVD record", display_text="Open NVD"),
+    "TRIAGE_SCORE": st.column_config.NumberColumn("Local triage heuristic", format="%.1f / 100"),
     "CVSS_SCORE": st.column_config.NumberColumn("Source CVSS", format="%.1f / 10"),
     "PUBLISHED": st.column_config.DatetimeColumn("Published (UTC)", format="YYYY-MM-DD HH:mm"),
 })
