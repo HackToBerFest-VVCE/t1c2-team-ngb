@@ -5,7 +5,11 @@
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "/api/index.py"
+      "destination": "/api"
+    },
+    {
+      "source": "/api",
+      "destination": "/api"
     },
     {
       "source": "/((?!assets/|favicon.ico).*)",
@@ -13,11 +17,7 @@
     }
   ],
   "functions": {
-    "api/index.py": {
-      "maxDuration": 60,
-      "excludeFiles": "{.env,.env.*,**/.env,**/.env.*,**/tests/**,**/*.test.*,**/node_modules/**,**/.venv/**,data/external/**,data/vulnerabilities.full.json,data/vulnerabilities.full.json.gz,data/vulnerabilities.full.parquet}"
-    },
-    "app.py": {
+    "api/*.py": {
       "maxDuration": 60,
       "excludeFiles": "{.env,.env.*,**/.env,**/.env.*,**/tests/**,**/*.test.*,**/node_modules/**,**/.venv/**,data/external/**,data/vulnerabilities.full.json,data/vulnerabilities.full.json.gz,data/vulnerabilities.full.parquet}"
     }

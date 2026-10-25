@@ -91,6 +91,7 @@ def create_app(test_config=None):
 
     # ── Blueprints ────────────────────────────────────────────────────
     app.register_blueprint(api, url_prefix="/api")
+    app.register_blueprint(api, name="api_direct")
 
     # In the Render Docker deployment, serve the built SPA and API from one
     # origin. Local Vite development continues to use its /api proxy.
