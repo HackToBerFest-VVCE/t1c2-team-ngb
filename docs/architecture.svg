@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1100" viewBox="0 0 1600 1100" role="img" aria-labelledby="title desc">
   <title id="title">ThreatLens AI · Team Nova cybersecurity platform</title>
-  <desc id="desc">Halloween-themed architecture for Team Nova's ThreatLens AI. Shows dataset and template discovery, project scoping, optional Snowpark preparation and Cortex analysis, source-backed vulnerability analytics, append-only contribution and peer-review audit events, React and Streamlit interfaces, and deployment.</desc>
+  <desc id="desc">Halloween-themed Team Nova ThreatLens AI architecture. Production React and Flask applications read a bounded NVD-origin vulnerability table in Snowflake. The diagram also shows Snowpark and Streamlit workflows, optional dataset templates, held-out evaluation, and audit and AI account limitations.</desc>
   <defs>
     <linearGradient id="bg" x2="0" y2="1"><stop stop-color="#171522"/><stop offset="1" stop-color="#0d0c13"/></linearGradient>
     <linearGradient id="orange" x2="1" y2="1"><stop stop-color="#ff9a3d"/><stop offset="1" stop-color="#e85b21"/></linearGradient>
@@ -18,11 +18,11 @@
   <!-- Halloween accents -->
   <g transform="translate(86 56)" fill="#f28d3a"><path d="M0 15c8-12 18-12 26 0 8-12 18-12 26 0-2 15-12 23-26 28C12 38 2 30 0 15z"/><path d="m16 21 7 3-7 4zm18 0-7 3 7 4z" fill="#171522"/><path d="m25 29 5 6 5-6z" fill="#171522"/></g>
   <g transform="translate(1460 55)" fill="#9b7aff"><path d="M0 27Q15 2 29 23Q43 2 58 27Q45 25 36 43L29 30 22 43Q13 25 0 27z"/><circle cx="29" cy="25" r="4" fill="#171522"/></g>
-  <text x="800" y="57" text-anchor="middle" class="tag" fill="#ffab58">TEAM NOVA FLAGSHIP  •  SYSTEM ARCHITECTURE  •  HALLOWEEN EDITION</text>
-  <text x="800" y="111" text-anchor="middle" font-size="43" font-weight="850">THREATLENS <tspan fill="#ff913d">AI</tspan></text>
-  <text x="800" y="143" text-anchor="middle" class="body muted">From public vulnerability records to explainable, evidence-linked insights</text>
+  <text x="800" y="57" text-anchor="middle" class="tag" fill="#ffab58">TEAM NGB × TEAM NOVA ECOSYSTEM  •  SYSTEM ARCHITECTURE  •  HALLOWEEN EDITION</text>
+  <text x="800" y="111" text-anchor="middle" font-size="43" font-weight="850" fill="#f8f2e9">THREATLENS AI</text>
+  <text x="800" y="143" text-anchor="middle" class="body muted">Hackathon Challenge 02 • Snowflake-centered, evidence-linked vulnerability intelligence</text>
   <rect x="546" y="160" width="508" height="31" rx="15" fill="#35251f" stroke="#a95c2d"/>
-  <text x="800" y="181" text-anchor="middle" class="tag" fill="#ffb76d">LIVE SNOWFLAKE SOURCE  •  NVD CVE DATA  •  READ-ONLY APP ROLE</text>
+  <text x="800" y="181" text-anchor="middle" class="tag" fill="#ffb76d">LIVE SNOWFLAKE CORE  •  NVD CVEs  •  READ-ONLY APP ROLE</text>
 
   <!-- Five stages -->
   <g filter="url(#shadow)">
@@ -35,53 +35,53 @@
   <circle cx="1002" cy="253" r="19" fill="url(#violet)"/><text x="1002" y="260" text-anchor="middle" font-size="18" font-weight="800">4</text><text x="1031" y="250" class="head">Evaluate &amp; review</text><text x="1031" y="273" class="tiny muted">Held-out metrics • audit ledger</text>
   <circle cx="1313" cy="253" r="19" fill="url(#orange)"/><text x="1313" y="260" text-anchor="middle" font-size="18" font-weight="800">5</text><text x="1342" y="250" class="head">Deploy &amp; share</text><text x="1342" y="273" class="tiny muted">React • Flask • Streamlit</text></g>
   <!-- stage 1 -->
-  <rect class="inner" x="56" y="294" width="251" height="86" rx="12"/><text x="75" y="321" class="body" font-weight="700">NVD CVE 2.0</text><text x="75" y="345" class="small muted">Bundled snapshot by default;</text><text x="75" y="366" class="small muted">annual feed import available.</text>
-  <rect class="inner" x="56" y="393" width="251" height="63" rx="12"/><text x="75" y="419" class="body" font-weight="700">Snowflake table / view</text><text x="75" y="442" class="small muted">Optional, canonical CVE columns.</text>
-  <rect class="inner" x="56" y="469" width="251" height="63" rx="12"/><text x="75" y="495" class="body" font-weight="700">Hugging Face datasets</text><text x="75" y="518" class="small muted">Separate optional model-training path.</text>
+  <rect class="inner" x="56" y="294" width="251" height="86" rx="12"/><text x="75" y="321" class="body" font-weight="700">NIST NVD CVE 2.0</text><text x="75" y="345" class="small muted">Public vulnerability records;</text><text x="75" y="366" class="small muted">CVSS remains NVD sourced.</text>
+  <rect class="inner" x="56" y="393" width="251" height="63" rx="12"/><text x="75" y="419" class="body" font-weight="700">Snowflake live CVE table</text><text x="75" y="442" class="small muted">160,846 rows • 25 Oct 2026.</text>
+  <rect class="inner" x="56" y="469" width="251" height="63" rx="12"/><text x="75" y="495" class="body" font-weight="700">Hugging Face datasets</text><text x="75" y="518" class="small muted">Separate, task-specific model training.</text>
   <!-- stage 2 -->
-  <rect x="367" y="294" width="251" height="103" rx="12" fill="#272035" stroke="#8067c5"/><text x="386" y="322" class="tag" fill="#c6b6ff">DEMO  •  DEFAULT</text><text x="386" y="350" class="body">Local NVD catalog</text><text x="386" y="376" class="small muted">Offline-capable and labeled DEMO.</text>
-  <rect x="367" y="410" width="251" height="103" rx="12" fill="#24202f" stroke="#e18b45"/><text x="386" y="438" class="tag" fill="#ffb66a">SNOWFLAKE  •  OPT-IN</text><text x="386" y="466" class="body">Bounded read-only SELECT</text><text x="386" y="492" class="small muted">Secrets stay in backend environment.</text>
-  <text x="492" y="536" text-anchor="middle" class="tiny muted">Switch via DATA_SOURCE after setup</text>
+  <rect x="367" y="294" width="251" height="103" rx="12" fill="#24202f" stroke="#e18b45"/><text x="386" y="322" class="tag" fill="#ffb66a">CORE TEMPLATE</text><text x="386" y="350" class="body">Vulnerability prioritization</text><text x="386" y="376" class="small muted">Snowflake source • scoped goals.</text>
+  <rect x="367" y="410" width="251" height="103" rx="12" fill="#272035" stroke="#8067c5"/><text x="386" y="438" class="tag" fill="#c6b6ff">PROJECT TEMPLATES</text><text x="386" y="466" class="body">Code flaw • intrusion detection</text><text x="386" y="492" class="small muted">Templates • datasets not linked.</text>
+  <text x="492" y="536" text-anchor="middle" class="tiny muted">Goals and success metrics are validated.</text>
   <!-- stage 3 -->
-  <rect class="inner" x="678" y="294" width="251" height="63" rx="12"/><text x="697" y="321" class="body" font-weight="700">Normalize canonical CVE fields</text><text x="697" y="344" class="small muted">Dates, CVSS, severity, CWE, products</text>
-  <rect class="inner" x="678" y="370" width="251" height="63" rx="12"/><text x="697" y="397" class="body" font-weight="700">Quality checks &amp; priority</text><text x="697" y="420" class="small muted">Withdrawn records excluded.</text>
-  <rect class="inner" x="678" y="446" width="251" height="86" rx="12"/><text x="697" y="473" class="body" font-weight="700">pandas + scikit-learn</text><text x="697" y="497" class="small muted">Trends, deterministic clusters,</text><text x="697" y="518" class="small muted">anomaly candidates, risk analysis.</text>
+  <rect class="inner" x="678" y="294" width="251" height="63" rx="12"/><text x="697" y="321" class="body" font-weight="700">Snowpark normalization</text><text x="697" y="344" class="small muted">CVE fields cleaned in Snowflake.</text>
+  <rect class="inner" x="678" y="370" width="251" height="63" rx="12"/><text x="697" y="397" class="body" font-weight="700">Separate triage heuristic</text><text x="697" y="420" class="small muted">80% source CVSS + 20% recency.</text>
+  <rect class="inner" x="678" y="446" width="251" height="86" rx="12"/><text x="697" y="473" class="body" font-weight="700">Python analytics &amp; ML</text><text x="697" y="497" class="small muted">Trends • clusters • anomalies</text><text x="697" y="518" class="small muted">Separate task-specific training.</text>
   <!-- stage 4 -->
-  <rect class="inner" x="989" y="294" width="251" height="63" rx="12"/><text x="1008" y="321" class="body" font-weight="700">Browse &amp; filter CVEs</text><text x="1008" y="344" class="small muted">Source URLs and record drill-down.</text>
-  <rect class="inner" x="989" y="370" width="251" height="63" rx="12"/><text x="1008" y="397" class="body" font-weight="700">Transparent risk signals</text><text x="1008" y="420" class="small muted">CVSS is source data; priority is heuristic.</text>
-  <rect class="inner" x="989" y="446" width="251" height="86" rx="12"/><text x="1008" y="473" class="body" font-weight="700">Optional AI commentary</text><text x="1008" y="497" class="small muted">Local summary works without a key;</text><text x="1008" y="518" class="small muted">external provider runs on request only.</text>
+  <rect class="inner" x="989" y="294" width="251" height="63" rx="12"/><text x="1008" y="321" class="body" font-weight="700">Source CVSS &amp; severity</text><text x="1008" y="344" class="small muted">Missing CVSS stays unscored.</text>
+  <rect class="inner" x="989" y="370" width="251" height="63" rx="12"/><text x="1008" y="397" class="body" font-weight="700">Held-out model evaluation</text><text x="1008" y="420" class="small muted">Held-out dataset metrics only.</text>
+  <rect class="inner" x="989" y="446" width="251" height="86" rx="12"/><text x="1008" y="473" class="body" font-weight="700">AI &amp; audit controls</text><text x="1008" y="497" class="small muted">Cortex and audit writes gated</text><text x="1008" y="518" class="small muted">by account plan and role grants.</text>
   <!-- stage 5 -->
-  <rect class="inner" x="1300" y="294" width="244" height="63" rx="12"/><text x="1319" y="321" class="body" font-weight="700">React + Streamlit apps</text><text x="1319" y="344" class="small muted">Project Studio, explorer, audit.</text>
-  <rect class="inner" x="1300" y="370" width="244" height="63" rx="12"/><text x="1319" y="397" class="body" font-weight="700">Flask REST API</text><text x="1319" y="420" class="small muted">Validated, paginated JSON endpoints.</text>
-  <rect class="inner" x="1300" y="446" width="244" height="86" rx="12"/><text x="1319" y="473" class="body" font-weight="700">Share findings</text><text x="1319" y="497" class="small muted">CSV / JSON export, HTML report;</text><text x="1319" y="518" class="small muted">deployment via Docker / Render.</text>
+  <rect class="inner" x="1300" y="294" width="244" height="63" rx="12"/><text x="1319" y="321" class="body" font-weight="700">React + Flask on Vercel</text><text x="1319" y="344" class="small muted">Production web app is live.</text>
+  <rect class="inner" x="1300" y="370" width="244" height="63" rx="12"/><text x="1319" y="397" class="body" font-weight="700">Native Streamlit source</text><text x="1319" y="420" class="small muted">Deploy needs Snowflake grants.</text>
+  <rect class="inner" x="1300" y="446" width="244" height="86" rx="12"/><text x="1319" y="473" class="body" font-weight="700">Share &amp; export</text><text x="1319" y="497" class="small muted">CSV / JSON / HTML reports;</text><text x="1319" y="518" class="small muted">community feedback via repo.</text>
   <!-- directional connectors -->
   <path class="line" d="M327 382h17"/><path class="line" d="M638 382h17"/><path class="line" d="M949 382h17"/><path class="line" d="M1260 382h17"/>
 
   <!-- Runtime architecture -->
   <rect x="38" y="579" width="1003" height="362" rx="20" fill="#1c1a25" stroke="#51495e" stroke-width="1.5" filter="url(#shadow)"/>
-  <text x="66" y="616" class="section">Runtime architecture</text><text x="66" y="642" class="small muted">Single web app; source selection and analysis stay server-side</text>
+  <text x="66" y="616" class="section">Production runtime architecture</text><text x="66" y="642" class="small muted">Snowflake is the primary live data source; credentials and queries stay server-side</text>
   <rect x="65" y="675" width="210" height="160" rx="15" fill="#252033" stroke="#8067c5" stroke-width="1.4"/>
   <text x="170" y="709" text-anchor="middle" class="tag" fill="#c6b6ff">CLIENT</text><text x="170" y="746" text-anchor="middle" font-size="23" font-weight="750">React + Vite</text><text x="170" y="777" text-anchor="middle" class="small muted">Dashboard navigation</text><text x="170" y="801" text-anchor="middle" class="small muted">Charts • filters • exports</text>
   <path class="line" d="M281 755h50"/>
   <rect x="341" y="675" width="280" height="160" rx="15" fill="#29212a" stroke="#d87e39" stroke-width="1.5"/>
   <text x="481" y="709" text-anchor="middle" class="tag" fill="#ffb66a">APPLICATION SERVER</text><text x="481" y="746" text-anchor="middle" font-size="23" font-weight="750">Flask REST API</text><text x="481" y="777" text-anchor="middle" class="small muted">Validation • caching • pagination</text><text x="481" y="801" text-anchor="middle" class="small muted">Analytics • report generation</text>
   <path class="line" d="M627 755h49"/>
-  <rect x="686" y="665" width="324" height="77" rx="14" fill="#211f2c" stroke="#9280c6"/><text x="706" y="695" class="tag" fill="#c6b6ff">DEMO PROVIDER</text><text x="706" y="722" class="small">Bundled NVD JSON / Parquet catalog</text>
-  <rect x="686" y="758" width="324" height="77" rx="14" fill="#28211e" stroke="#e18b45"/><text x="706" y="788" class="tag" fill="#ffb66a">OPTIONAL SNOWFLAKE PROVIDER</text><text x="706" y="815" class="small">CVE view • bounded, read-only query</text>
+  <rect x="686" y="665" width="324" height="77" rx="14" fill="#28211e" stroke="#e18b45"/><text x="706" y="695" class="tag" fill="#ffb66a">LIVE SNOWFLAKE CORE</text><text x="706" y="722" class="small">160,846 active CVEs • NVD source</text>
+  <rect x="686" y="758" width="324" height="77" rx="14" fill="#211f2c" stroke="#9280c6"/><text x="706" y="788" class="tag" fill="#c6b6ff">DEMO / OPTIONAL WORKFLOWS</text><text x="706" y="815" class="small">Demo snapshot • Snowpark • Streamlit</text>
   <path d="M654 755v-51h25m-25 51v42h25" fill="none" stroke="#f5a04c" stroke-width="2.5" marker-end="url(#arrow)"/>
-  <text x="66" y="885" class="tiny muted">Optional side workflows: NVD/Hugging Face discovery • Snowpark transforms • AI_COMPLETE • grouped held-out task training.</text>
-  <text x="66" y="912" class="tiny muted">Audit writes use a separate identity • read paths remain bounded • live table is NVD-origin data, not a Marketplace listing.</text>
+  <text x="66" y="885" class="tiny muted">Snowflake AI: Cortex trial-gated; local fallback • CoCo not invoked in this environment.</text>
+  <text x="66" y="912" class="tiny muted">Audit writer pending • NVD-origin source is public data, not a Marketplace listing.</text>
 
   <!-- Technology stack -->
   <rect x="1063" y="579" width="499" height="362" rx="20" fill="#1c1a25" stroke="#51495e" stroke-width="1.5" filter="url(#shadow)"/>
   <text x="1090" y="616" class="section">Technology stack</text>
-  <g class="small"><text x="1092" y="660" fill="#ffb66a" font-weight="700">Dashboard</text><text x="1270" y="660">React 18 • TypeScript • Streamlit</text><path d="M1090 674h445" stroke="#403a49"/>
+  <g class="small"><text x="1092" y="660" fill="#ffb66a" font-weight="700">Dashboard</text><text x="1270" y="660">React 18 • TypeScript • Streamlit source</text><path d="M1090 674h445" stroke="#403a49"/>
     <text x="1092" y="703" fill="#ffb66a" font-weight="700">API</text><text x="1270" y="703">Python • Flask • Pydantic</text><path d="M1090 717h445" stroke="#403a49"/>
     <text x="1092" y="746" fill="#ffb66a" font-weight="700">Analytics</text><text x="1270" y="746">pandas • scikit-learn • Snowpark</text><path d="M1090 760h445" stroke="#403a49"/>
-    <text x="1092" y="789" fill="#ffb66a" font-weight="700">Data</text><text x="1270" y="789">NVD CVE 2.0 • optional Snowflake</text><path d="M1090 803h445" stroke="#403a49"/>
-    <text x="1092" y="832" fill="#ffb66a" font-weight="700">Optional AI</text><text x="1270" y="832">Snowflake Cortex • NIM • Kimi</text><path d="M1090 846h445" stroke="#403a49"/>
-    <text x="1092" y="875" fill="#ffb66a" font-weight="700">Deploy</text><text x="1270" y="875">Docker • Render • Vercel config</text><path d="M1090 889h445" stroke="#403a49"/>
-    <text x="1092" y="918" fill="#ffb66a" font-weight="700">Storage</text><text x="1270" y="918">NVD table • append-only audit events</text></g>
+    <text x="1092" y="789" fill="#ffb66a" font-weight="700">Data</text><text x="1270" y="789">Live NVD-origin CVEs in Snowflake</text><path d="M1090 803h445" stroke="#403a49"/>
+    <text x="1092" y="832" fill="#ffb66a" font-weight="700">AI</text><text x="1270" y="832">NVIDIA NIM • Cortex fallback</text><path d="M1090 846h445" stroke="#403a49"/>
+    <text x="1092" y="875" fill="#ffb66a" font-weight="700">Deploy</text><text x="1270" y="875">Vercel production • Streamlit source</text><path d="M1090 889h445" stroke="#403a49"/>
+    <text x="1092" y="918" fill="#ffb66a" font-weight="700">Audit</text><text x="1270" y="918">API ready • writer ledger not enabled</text></g>
 
   <!-- strengths / honest scope -->
   <rect x="38" y="967" width="1524" height="88" rx="17" fill="#211e2c" stroke="#454052"/>
@@ -90,5 +90,5 @@
     <circle cx="685" cy="1009" r="19" fill="#41271c"/><path d="M675 1018v-8l10-9 10 9v8zm7 0v-7h6v7" fill="none" stroke="#ffac5f" stroke-width="2"/><text x="716" y="1003" class="body" font-weight="750">Bounded access</text><text x="716" y="1027" class="tiny muted">Validated inputs and Snowflake row cap</text>
     <circle cx="1010" cy="1009" r="19" fill="#30264a"/><path d="M1000 1009h7l4-8 5 16 4-8h7" fill="none" stroke="#bcaaff" stroke-width="2"/><text x="1041" y="1003" class="body" font-weight="750">Explainable signals</text><text x="1041" y="1027" class="tiny muted">Methods and caveats shown in app</text>
     <circle cx="1322" cy="1009" r="19" fill="#41271c"/><path d="m1312 1009 7 7 13-15" fill="none" stroke="#ffac5f" stroke-width="3"/><text x="1353" y="1003" class="body" font-weight="750">Local analysis</text><text x="1353" y="1027" class="tiny muted">Optional AI on explicit request</text></g>
-  <text x="800" y="1075" text-anchor="middle" class="tiny muted">Halloween styling inspired by the supplied reference • Architecture reflects repository implementation • Marketplace eligibility requires separate verification</text>
+  <text x="800" y="1075" text-anchor="middle" class="tiny muted">Halloween architecture • Production-verified Snowflake source • Optional services and account limits are explicitly identified</text>
 </svg>
