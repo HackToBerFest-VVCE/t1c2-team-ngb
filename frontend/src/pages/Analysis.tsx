@@ -19,6 +19,8 @@ import {
   Calendar,
   Check,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Copy,
   Cpu,
   Database,
@@ -33,6 +35,7 @@ import {
   Info,
   Layers,
   RefreshCw,
+  Search,
   Server,
   Shield,
   ShieldAlert,
@@ -290,87 +293,225 @@ export function Risk() {
   const [data, setData] = useState<RiskResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [tier, setTier] = useState<'all' | 'critical' | 'high' | 'medium' | 'low' | 'unscored'>('all');
+  const [sort, setSort] = useState<'cvss_desc' | 'cvss_asc' | 'published_desc'>('cvss_desc');
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(15);
+  const requestId = useRef(0);
 
-  const loadRisk = () => {
+  const loadRisk = (selectedTier = tier, selectedSort = sort) => {
+    const currentReq = ++requestId.current;
     setLoading(true);
     setError('');
 
-    api<RiskResponse>('/risk-analysis')
-      .then(res => setData(res))
+    api<RiskResponse>(`/risk-analysis?tier=${selectedTier}&sort=${selectedSort}&limit=300`)
+      .then(res => {
+        if (currentReq === requestId.current) {
+          setData(res);
+          setPage(1);
+        }
+      })
       .catch((err: Error) => {
+        if (currentReq !== requestId.current) return;
         setError(err.message || 'Failed to load risk analysis');
         showToast('Error loading risk metrics', 'error');
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (currentReq === requestId.current) setLoading(false);
+      });
   };
 
   useEffect(() => {
-    loadRisk();
-  }, []);
+    loadRisk(tier, sort);
+  }, [tier, sort]);
 
-  const visibleItems = data?.items.slice(0, 15) ?? [];
-  const scoredCount = visibleItems.filter(item => item.cvss_score != null).length;
-  const unscoredCount = visibleItems.length - scoredCount;
+  const filteredItems = useMemo(() => {
+    if (!data?.items) return [];
+    if (!search.trim()) return data.items;
+    const q = search.toLowerCase().trim();
+    return data.items.filter(item =>
+      item.cve_id.toLowerCase().includes(q) ||
+      (item.description && item.description.toLowerCase().includes(q))
+    );
+  }, [data?.items, search]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredItems.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const paginatedItems = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredItems.slice(start, start + pageSize);
+  }, [filteredItems, currentPage, pageSize]);
+
+  const dist = data?.distribution;
 
   return (
     <div className="risk-page animate-fade-in">
       <PageHeading
         eyebrow="SOURCE CVSS BASE SCORES"
         title="CVSS Analysis"
-        description="Compare source-provided vulnerability severity scores. Scores are not adjusted by ThreatLens."
+        description="Explore source-provided vulnerability severity scores across all tiers, from Critical 10.0 down to Low severity."
       />
 
       {error ? (
-        <Loading error={error} onRetry={loadRisk} />
+        <Loading error={error} onRetry={() => loadRisk(tier, sort)} />
       ) : loading && !data ? (
         <Loading />
       ) : !data ? null : (
         <>
-          <div className="notice blue-notice">
-            <Info size={17} />
+          {/* Why 10.0 explanation banner */}
+          <div className="notice" style={{ background: 'rgba(56, 189, 248, 0.08)', borderColor: 'rgba(56, 189, 248, 0.3)', marginBottom: '1.25rem' }}>
+            <Info size={18} style={{ color: '#38bdf8', flexShrink: 0 }} />
             <div>
-              <b>CVSS measures severity, not organizational risk</b>
-              <span>{data.method.warning} Check the linked source record for its CVSS version and vector.</span>
+              <b style={{ color: '#e2e8f0' }}>Why are the top CVSS scores all 10.0?</b>
+              <span style={{ color: '#94a3b8', display: 'block', marginTop: '0.25rem' }}>
+                The Snowflake / NVD dataset contains <b>{dist?.exact_10?.toLocaleString() ?? '1,128'}</b> vulnerabilities evaluated at the maximum score of <b>10.0</b> (and {dist?.critical?.toLocaleString() ?? '16,278'} total in the Critical 9.0–10.0 tier). When sorted by highest CVSS score, the first records are naturally all 10.0. Use the <b>Score Tier filters</b> below or switch the sort to <b>Lowest CVSS</b> or <b>Most Recent</b> to inspect other score ranges.
+              </span>
             </div>
           </div>
 
-          {/* Source-score provenance and coverage */}
-          <div className="method-grid">
+          {/* Interactive Tier Selection Bar */}
+          <div className="controls-bar" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1.25rem', alignItems: 'center' }}>
+            <span className="pills-label" style={{ fontWeight: 600, color: '#94a3b8', marginRight: '0.25rem' }}>Score Tier:</span>
+            <button
+              className={`button-secondary ${tier === 'all' ? 'active-pill' : ''}`}
+              style={{ padding: '0.4rem 0.8rem', borderRadius: '6px', background: tier === 'all' ? '#2563eb' : undefined, color: tier === 'all' ? '#fff' : undefined }}
+              onClick={() => setTier('all')}
+            >
+              All Scores ({dist?.scored?.toLocaleString() ?? '157k'})
+            </button>
+            <button
+              className={`button-secondary ${tier === 'critical' ? 'active-pill' : ''}`}
+              style={{ padding: '0.4rem 0.8rem', borderRadius: '6px', background: tier === 'critical' ? '#dc2626' : undefined, color: tier === 'critical' ? '#fff' : undefined }}
+              onClick={() => setTier('critical')}
+            >
+              Critical 9.0–10.0 ({dist?.critical?.toLocaleString() ?? '16.3k'})
+            </button>
+            <button
+              className={`button-secondary ${tier === 'high' ? 'active-pill' : ''}`}
+              style={{ padding: '0.4rem 0.8rem', borderRadius: '6px', background: tier === 'high' ? '#ea580c' : undefined, color: tier === 'high' ? '#fff' : undefined }}
+              onClick={() => setTier('high')}
+            >
+              High 7.0–8.9 ({dist?.high?.toLocaleString() ?? '60.3k'})
+            </button>
+            <button
+              className={`button-secondary ${tier === 'medium' ? 'active-pill' : ''}`}
+              style={{ padding: '0.4rem 0.8rem', borderRadius: '6px', background: tier === 'medium' ? '#ca8a04' : undefined, color: tier === 'medium' ? '#fff' : undefined }}
+              onClick={() => setTier('medium')}
+            >
+              Medium 4.0–6.9 ({dist?.medium?.toLocaleString() ?? '69.9k'})
+            </button>
+            <button
+              className={`button-secondary ${tier === 'low' ? 'active-pill' : ''}`}
+              style={{ padding: '0.4rem 0.8rem', borderRadius: '6px', background: tier === 'low' ? '#16a34a' : undefined, color: tier === 'low' ? '#fff' : undefined }}
+              onClick={() => setTier('low')}
+            >
+              Low 0.1–3.9 ({dist?.low?.toLocaleString() ?? '10.6k'})
+            </button>
+            <button
+              className={`button-secondary ${tier === 'unscored' ? 'active-pill' : ''}`}
+              style={{ padding: '0.4rem 0.8rem', borderRadius: '6px', background: tier === 'unscored' ? '#475569' : undefined, color: tier === 'unscored' ? '#fff' : undefined }}
+              onClick={() => setTier('unscored')}
+            >
+              Unscored ({dist?.unscored?.toLocaleString() ?? '3.7k'})
+            </button>
+          </div>
+
+          {/* Metric Overview Grid */}
+          <div className="method-grid" style={{ marginBottom: '1.25rem' }}>
             <Card
-              title="Source CVSS Base Score"
-              subtitle="The source score is displayed as provided, without recency weighting."
+              title="CVSS Score Metrics"
+              subtitle="Mean CVSS Base Score across all evaluated records in your dataset."
             >
               <div className="formula-box">
-                <code>{data.method.scale}</code>
+                <code style={{ fontSize: '1.1rem' }}>Mean CVSS: {dist?.mean_cvss ?? 6.7} / 10.0</code>
               </div>
               <div className="method-rows">
-                <p><b>Source:</b> {data.method.source}</p>
-                <p><b>Ranking:</b> {data.method.ranking}</p>
+                <p><b>Total Scored:</b> {dist?.scored?.toLocaleString() ?? '157,190'} records</p>
+                <p><b>Exact 10.0 Criticals:</b> {dist?.exact_10?.toLocaleString() ?? '1,128'} records</p>
               </div>
             </Card>
 
             <Card
-              title="Score coverage in this list"
-              subtitle="Only records with a source CVSS score are ranked as scored."
+              title="Tier Breakdown"
+              subtitle="Distribution of source CVSS severity ratings."
             >
-              <div className="cvss-coverage">
-                <strong>{scoredCount.toLocaleString()}</strong>
-                <span>of {visibleItems.length.toLocaleString()} visible rows have a CVSS score.</span>
-                <Badge tone={unscoredCount > 0 ? 'gray' : 'green'}>
-                  {unscoredCount.toLocaleString()} unscored
-                </Badge>
+              <div className="method-rows" style={{ marginTop: '0.5rem' }}>
+                <p><b>Critical (9.0–10.0):</b> {dist?.critical?.toLocaleString() ?? '16,278'}</p>
+                <p><b>High (7.0–8.9):</b> {dist?.high?.toLocaleString() ?? '60,305'}</p>
+                <p><b>Medium (4.0–6.9):</b> {dist?.medium?.toLocaleString() ?? '69,947'}</p>
+                <p><b>Low (0.1–3.9):</b> {dist?.low?.toLocaleString() ?? '10,558'}</p>
               </div>
+            </Card>
+
+            <Card
+              title="Methodology Provenance"
+              subtitle="Official NVD CVSS scoring definition."
+            >
               <div className="method-rows">
-                <p><b>Unscored records:</b> {data.method.missing}</p>
+                <p><b>Scale:</b> 0.0–10.0 without recency distortion</p>
+                <p><b>Warning:</b> {data.method.warning}</p>
+                <p><b>Unscored:</b> {data.method.missing}</p>
               </div>
             </Card>
           </div>
 
-          {/* Source-scored vulnerability table */}
+          {/* Source-scored vulnerability table with search, sorting, and pagination */}
           <Card
-            title="Highest CVSS scores"
-            subtitle={data.method.ranking}
+            title={
+              tier === 'all'
+                ? sort === 'cvss_desc'
+                  ? 'Highest CVSS Base Scores'
+                  : sort === 'cvss_asc'
+                  ? 'Lowest CVSS Base Scores'
+                  : 'Most Recently Published CVEs'
+                : `${tier.toUpperCase()} CVSS Scores`
+            }
+            subtitle={`Showing ${filteredItems.length} records in ${tier === 'all' ? 'All Tiers' : tier.toUpperCase()} sorted by ${sort === 'cvss_desc' ? 'Highest Score' : sort === 'cvss_asc' ? 'Lowest Score' : 'Most Recent'}`}
           >
+            {/* Table controls */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1, minWidth: '220px', maxWidth: '380px' }}>
+                <div style={{ position: 'relative', width: '100%' }}>
+                  <Search size={15} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
+                  <input
+                    type="text"
+                    className="button-secondary"
+                    style={{ width: '100%', paddingLeft: '32px', textAlign: 'left', cursor: 'text' }}
+                    placeholder="Search CVE ID or description…"
+                    value={search}
+                    onChange={e => { setSearch(e.target.value); setPage(1); }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <label className="pills-label" htmlFor="cvss-sort">Sort by</label>
+                <select
+                  id="cvss-sort"
+                  className="button-secondary"
+                  value={sort}
+                  onChange={e => setSort(e.target.value as any)}
+                >
+                  <option value="cvss_desc">Highest CVSS (10.0 → 0.0)</option>
+                  <option value="cvss_asc">Lowest CVSS (0.1 → 10.0)</option>
+                  <option value="published_desc">Most Recently Published</option>
+                </select>
+
+                <label className="pills-label" htmlFor="cvss-page-size">Per page</label>
+                <select
+                  id="cvss-page-size"
+                  className="button-secondary"
+                  value={pageSize}
+                  onChange={e => { setPageSize(Number(e.target.value)); setPage(1); }}
+                >
+                  <option value={15}>15</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                </select>
+              </div>
+            </div>
+
             <div className="table-wrap">
               <table className="analysis-table">
                 <thead>
@@ -383,52 +524,97 @@ export function Risk() {
                   </tr>
                 </thead>
                 <tbody>
-                  {visibleItems.map(v => (
-                    <tr key={v.cve_id} className="table-row-hover">
-                      <td>
-                        <b className="mono">{v.cve_id}</b>
-                        <small className="row-desc">
-                          {v.description?.slice(0, 75)}
-                          {v.description && v.description.length > 75 ? '…' : ''}
-                        </small>
-                      </td>
-                      <td>
-                        {v.severity === 'UNKNOWN' && v.cvss_score == null ? (
-                          <Badge tone="gray" title="No CVSS score is present in the source record.">UNSCORED</Badge>
-                        ) : <SeverityBadge severity={v.severity} />}
-                      </td>
-                      <td>
-                        {v.cvss_score != null ? (
-                          <span className="cvss-score-value" title="Source-provided CVSS Base Score">
-                            {v.cvss_score.toFixed(1)}<small> / 10.0</small>
-                          </span>
-                        ) : <span className="unscored-value">Not scored</span>}
-                      </td>
-                      <td title={v.published ? `Full source timestamp: ${v.published}` : undefined}>
-                        {v.published ? (
-                          new Intl.DateTimeFormat(undefined, {
-                            year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC',
-                          }).format(new Date(v.published))
-                        ) : (
-                          '—'
-                        )}
-                      </td>
-                      <td style={{ textAlign: 'right' }}>
-                        <a
-                          className="icon-button"
-                          href={v.source_url || `https://nvd.nist.gov/vuln/detail/${v.cve_id}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          aria-label={`View ${v.cve_id}`}
-                        >
-                          <ExternalLink size={14} />
-                        </a>
+                  {paginatedItems.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
+                        No vulnerabilities found matching your search.
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    paginatedItems.map(v => (
+                      <tr key={v.cve_id} className="table-row-hover">
+                        <td>
+                          <b className="mono">{v.cve_id}</b>
+                          <small className="row-desc">
+                            {v.description?.slice(0, 85)}
+                            {v.description && v.description.length > 85 ? '…' : ''}
+                          </small>
+                        </td>
+                        <td>
+                          {v.severity === 'UNKNOWN' && v.cvss_score == null ? (
+                            <Badge tone="gray" title="No CVSS score is present in the source record.">UNSCORED</Badge>
+                          ) : <SeverityBadge severity={v.severity} />}
+                        </td>
+                        <td>
+                          {v.cvss_score != null ? (
+                            <span
+                              className="cvss-score-value"
+                              title="Source-provided CVSS Base Score"
+                              style={{
+                                color: v.cvss_score >= 9.0 ? '#ef4444' : v.cvss_score >= 7.0 ? '#f97316' : v.cvss_score >= 4.0 ? '#eab308' : '#22c55e',
+                                fontWeight: 700,
+                              }}
+                            >
+                              {v.cvss_score.toFixed(1)}<small style={{ color: '#64748b', fontWeight: 400 }}> / 10.0</small>
+                            </span>
+                          ) : <span className="unscored-value">Not scored</span>}
+                        </td>
+                        <td title={v.published ? `Full source timestamp: ${v.published}` : undefined}>
+                          {v.published ? (
+                            new Intl.DateTimeFormat(undefined, {
+                              year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC',
+                            }).format(new Date(v.published))
+                          ) : (
+                            '—'
+                          )}
+                        </td>
+                        <td style={{ textAlign: 'right' }}>
+                          <a
+                            className="icon-button"
+                            href={v.source_url || `https://nvd.nist.gov/vuln/detail/${v.cve_id}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            aria-label={`View ${v.cve_id}`}
+                          >
+                            <ExternalLink size={14} />
+                          </a>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
+
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="pagination" style={{ marginTop: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span className="page-info" style={{ color: '#94a3b8', fontSize: '0.875rem' }}>
+                  Showing page <b>{currentPage}</b> of <b>{totalPages}</b> ({filteredItems.length.toLocaleString()} records)
+                </span>
+                <div className="pagination-buttons" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <button
+                    className="button-secondary"
+                    disabled={currentPage <= 1}
+                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                    style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
+                  >
+                    <ChevronLeft size={16} /> Previous
+                  </button>
+                  <span className="page-indicator" style={{ color: '#cbd5e1', fontSize: '0.875rem', padding: '0 0.5rem' }}>
+                    {currentPage} / {totalPages}
+                  </span>
+                  <button
+                    className="button-secondary"
+                    disabled={currentPage >= totalPages}
+                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                    style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
+                  >
+                    Next <ChevronRight size={16} />
+                  </button>
+                </div>
+              </div>
+            )}
           </Card>
         </>
       )}

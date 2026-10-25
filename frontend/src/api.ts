@@ -132,8 +132,23 @@ export interface RiskMethod {
   warning: string;
 }
 
+export interface RiskDistribution {
+  total: number;
+  scored: number;
+  unscored: number;
+  exact_10: number;
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+  mean_cvss: number;
+}
+
 export interface RiskResponse {
   method: RiskMethod;
+  distribution?: RiskDistribution;
+  tier?: string;
+  sort?: string;
   items: Vulnerability[];
 }
 

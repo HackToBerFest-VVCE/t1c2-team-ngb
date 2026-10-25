@@ -610,20 +610,75 @@ RISK_METHOD = {
 
 @api.get("/risk-analysis")
 def risk():
-    """Rank CVE records by the source-provided CVSS Base Score."""
+    """Rank CVE records by the source-provided CVSS Base Score with tier filters."""
+    tier = request.args.get("tier", "all").strip().lower()
+    sort_by = request.args.get("sort", "cvss_desc").strip().lower()
+    try:
+        limit = min(max(int(request.args.get("limit", 200)), 10), 1000)
+    except (ValueError, TypeError):
+        limit = 200
+
     frame = _records()
-    top = frame.sort_values(
-        ["cvss_score", "published", "cve_id"],
-        ascending=[False, False, True],
-        na_position="last",
-        kind="mergesort",
-    ).head(100)
+    total_records = len(frame)
+    scored = frame[frame["cvss_score"].notna()]
+    unscored_count = total_records - len(scored)
+    mean_score = round(float(scored["cvss_score"].mean()), 1) if not scored.empty else 0.0
+
+    distribution = {
+        "total": total_records,
+        "scored": len(scored),
+        "unscored": unscored_count,
+        "exact_10": int((frame["cvss_score"] == 10.0).sum()),
+        "critical": int((frame["cvss_score"] >= 9.0).sum()),
+        "high": int(((frame["cvss_score"] >= 7.0) & (frame["cvss_score"] < 9.0)).sum()),
+        "medium": int(((frame["cvss_score"] >= 4.0) & (frame["cvss_score"] < 7.0)).sum()),
+        "low": int(((frame["cvss_score"] >= 0.1) & (frame["cvss_score"] < 4.0)).sum()),
+        "mean_cvss": mean_score,
+    }
+
+    filtered = frame
+    if tier == "critical":
+        filtered = frame[frame["cvss_score"] >= 9.0]
+    elif tier == "high":
+        filtered = frame[(frame["cvss_score"] >= 7.0) & (frame["cvss_score"] < 9.0)]
+    elif tier == "medium":
+        filtered = frame[(frame["cvss_score"] >= 4.0) & (frame["cvss_score"] < 7.0)]
+    elif tier == "low":
+        filtered = frame[(frame["cvss_score"] >= 0.1) & (frame["cvss_score"] < 4.0)]
+    elif tier == "unscored":
+        filtered = frame[frame["cvss_score"].isna()]
+
+    if sort_by == "cvss_asc":
+        top = filtered.sort_values(
+            ["cvss_score", "published", "cve_id"],
+            ascending=[True, False, True],
+            na_position="last",
+            kind="mergesort",
+        ).head(limit)
+    elif sort_by == "published_desc":
+        top = filtered.sort_values(
+            ["published", "cvss_score", "cve_id"],
+            ascending=[False, False, True],
+            na_position="last",
+            kind="mergesort",
+        ).head(limit)
+    else:  # cvss_desc (default)
+        top = filtered.sort_values(
+            ["cvss_score", "published", "cve_id"],
+            ascending=[False, False, True],
+            na_position="last",
+            kind="mergesort",
+        ).head(limit)
+
     items = _public_rows(top)
     for item in items:
         item.pop("priority_score", None)
 
     return jsonify({
         "method": RISK_METHOD,
+        "distribution": distribution,
+        "tier": tier,
+        "sort": sort_by,
         "items": items,
     })
 
