@@ -19,6 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from ..analytics.core import add_priority, metrics, ml_results, safe_records
 from ..services.ai import AIServiceError, MODELS, analyze, analyze_locally, configuration, provider_options, select_cve_examples
+from ..services.forecast import HORIZONS, add_cortex_interpretation, build_forecast
 from ..services.provider import ProviderError, get_provider, get_records, mode
 from ..services.projects import project_catalog
 from ..services.audit import AuditUnavailable, append_event, audit_configured, list_events, summarize_events
@@ -684,6 +685,33 @@ def risk():
 
 
 # ── ML endpoints ──────────────────────────────────────────────────────
+
+@api.post("/ml/forecast")
+def ml_forecast():
+    """Build an NVD-based high/critical attack-family trend outlook.
+
+    Cortex interprets bounded aggregates when available; local analysis remains
+    complete if the account has no Cortex entitlement or the service is limited.
+    """
+    body = request.get_json(silent=True) or {}
+    if not isinstance(body, dict):
+        return _error("invalid_request", "Request body must be a JSON object.", 400)
+    days = body.get("days", 90)
+    if isinstance(days, bool) or not isinstance(days, int) or days not in HORIZONS:
+        return _error("invalid_parameter", "days must be one of 90, 180, 730, or 1095.", 400)
+    try:
+        source = get_provider().status()
+        report = build_forecast(_records(), days, {
+            "mode": source["mode"],
+            "dataset": source["dataset"],
+            "provider": source["provider"],
+            "record_count": source["record_count"],
+        })
+        report = add_cortex_interpretation(report)
+        report.pop("cortex_prompt", None)
+        return jsonify(report)
+    except ProviderError as exc:
+        return _error("data_source_unavailable", str(exc), 503)
 
 @api.get("/ml/clusters")
 def clusters():

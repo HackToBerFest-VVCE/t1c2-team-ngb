@@ -185,6 +185,64 @@ export interface AnomaliesResponse {
   evaluation: MLEvaluation;
 }
 
+export interface AttackForecastFamily {
+  name: string;
+  count: number;
+  critical: number;
+  high: number;
+  latest_30d: number;
+  historical_per_30d: number;
+  direction: string;
+  mean_cvss: number | null;
+  cve_examples: string[];
+  remedy: string;
+  expected_outcome: string;
+}
+
+export interface AttackForecastResponse {
+  window_days: number;
+  from: string;
+  to: string;
+  generated_at: string;
+  source: { mode: string; dataset: string; provider: string; record_count: number };
+  window_records: number;
+  high_critical_records: number;
+  latest_30d_high_critical: number;
+  historical_high_critical_per_30d: number;
+  coverage: {
+    from: string | null;
+    to: string | null;
+    dated_records_loaded: number;
+    window_limited_by_source_history: boolean;
+  };
+  confidence: string;
+  families: AttackForecastFamily[];
+  near_term_watchlist: Array<{
+    name: string;
+    observed_latest_30d: number;
+    direction: string;
+    reason: string;
+    defensive_action: string;
+    expected_outcome: string;
+    cve_examples: string[];
+  }>;
+  recent_high_critical: Array<{
+    cve_id: string;
+    published: string | null;
+    severity: string;
+    cvss_score: number | null;
+    attack_family: string;
+    source_url: string;
+  }>;
+  method: string;
+  limitations: string;
+  analysis_provider: 'local' | 'snowflake_cortex';
+  cortex_status: 'complete' | 'unavailable' | 'fallback';
+  cortex_model?: string;
+  cortex_interpretation?: string;
+  cortex_notice?: string;
+}
+
 export interface FieldInfo {
   name: string;
   type: string;

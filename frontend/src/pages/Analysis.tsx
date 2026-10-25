@@ -57,6 +57,7 @@ import {
   downloadExport,
   AIInsights,
   AIStatus,
+  AttackForecastResponse,
   ClustersResponse,
   HealthResponse,
   RiskResponse,
@@ -716,6 +717,8 @@ export function ML() {
         </>
       )}
 
+      <AttackForecastPanel />
+
       {error ? (
         <Loading error={error} onRetry={loadML} />
       ) : loading && !clusters ? (
@@ -883,6 +886,122 @@ export function ML() {
       )}
       <AIInsightPanel />
     </div>
+  );
+}
+
+function AttackForecastPanel() {
+  const [days, setDays] = useState(90);
+  const [report, setReport] = useState<AttackForecastResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const generate = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const result = await api<AttackForecastResponse>('/ml/forecast', {
+        method: 'POST',
+        body: JSON.stringify({ days }),
+      });
+      setReport(result);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to generate the NVD outlook.');
+      showToast('Attack-family outlook could not be generated', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const downloadReport = () => {
+    if (!report) return;
+    const lines = [
+      '# ThreatLens AI · NVD Attack-family Outlook',
+      `Generated: ${new Date(report.generated_at).toISOString()}`,
+      `Window: ${report.window_days} days (${new Date(report.from).toISOString()} – ${new Date(report.to).toISOString()})`,
+      `Source: ${report.source.dataset} · ${report.source.mode}`,
+      `Records: ${report.window_records.toLocaleString()} total; ${report.high_critical_records.toLocaleString()} Critical/High`,
+      `Analysis: ${report.analysis_provider === 'snowflake_cortex' ? `Snowflake Cortex (${report.cortex_model})` : 'Local deterministic pattern analysis'}`,
+      '', '## Observed attack-family signals',
+      ...report.families.map(item => `- **${item.name}** — ${item.count} total; ${item.critical} Critical / ${item.high} High; latest 30 days ${item.latest_30d}; direction: ${item.direction}. CVEs: ${item.cve_examples.join(', ') || 'none listed'}. Preferred defensive action: ${item.remedy}. Expected outcome if verified: ${item.expected_outcome}`),
+      '', '## Recently published Critical/High CVEs',
+      ...report.recent_high_critical.map(item => `- ${item.cve_id} · ${item.severity} · CVSS ${item.cvss_score ?? 'unscored'} · ${item.published ?? 'date unavailable'} · ${item.source_url}`),
+      '', '## Snowflake Cortex interpretation', report.cortex_interpretation || report.cortex_notice || 'No Cortex interpretation returned; see deterministic findings above.',
+      '', '## Method', report.method,
+      '', '## Limitations', report.limitations,
+    ];
+    const blob = new Blob([lines.join('\n')], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `threatlens-attack-outlook-${report.window_days}d-${new Date().toISOString().slice(0, 10)}.md`;
+    anchor.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  return (
+    <section className="attack-forecast-section" aria-labelledby="attack-forecast-heading">
+      <div className="section-title-wrap">
+        <h2 id="attack-forecast-heading"><Sparkles size={18} /> Attack-family outlook</h2>
+        <p>Find recurring and newly rising patterns across NVD Critical and High CVEs, then produce a defensive report.</p>
+      </div>
+      <div className="notice blue-notice">
+        <Info size={17} />
+        <div><b>Evidence boundary</b><span>This analyzes vulnerability disclosures and severity from your active NVD-backed source. It cannot confirm exploitation or know which attack will happen next. Directional signals are not probabilities.</span></div>
+      </div>
+      <Card title="Generate an NVD pattern report" subtitle="All dated Critical and High records in the selected window are grouped; the bounded aggregates are sent to Snowflake Cortex when available.">
+        <div className="filter-actions" style={{ marginBottom: 14, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <label htmlFor="forecast-window">Observation window</label>
+          <select id="forecast-window" className="button-secondary" value={days} onChange={event => { setDays(Number(event.target.value)); setReport(null); }}>
+            <option value={90}>90 days</option>
+            <option value={180}>180 days</option>
+            <option value={730}>2 years</option>
+            <option value={1095}>3 years</option>
+          </select>
+          <button className="button-primary" onClick={generate} disabled={loading}>
+            <Sparkles size={15} /> {loading ? 'Analyzing NVD patterns…' : 'Generate outlook'}
+          </button>
+          {report && <button className="button-secondary" onClick={downloadReport}><Download size={15} /> Download report</button>}
+        </div>
+        {error && <div className="notice" role="alert"><AlertTriangle size={17} /><div><b>Report unavailable</b><span>{error}</span></div></div>}
+        {loading && <Loading />}
+        {report && !loading && <>
+          <div className="metric-grid">
+            <div className="metric-card"><small>WINDOW RECORDS</small><strong>{report.window_records.toLocaleString()}</strong><span>All severities · {report.window_days}-day window</span></div>
+            <div className="metric-card"><small>CRITICAL + HIGH</small><strong>{report.high_critical_records.toLocaleString()}</strong><span>Source severity in selected period</span></div>
+            <div className="metric-card"><small>LAST 30 DAYS</small><strong>{report.latest_30d_high_critical.toLocaleString()}</strong><span>Critical / High disclosures</span></div>
+            <div className="metric-card"><small>ANALYSIS ENGINE</small><strong className="date-stat">{report.analysis_provider === 'snowflake_cortex' ? 'Cortex' : 'Local'}</strong><span>{report.cortex_model || 'Deterministic NVD grouping'} · {report.confidence} signal</span></div>
+          </div>
+          {report.coverage.window_limited_by_source_history && <div className="notice"><Info size={17} /><div><b>Short source history</b><span>The active source does not cover the full selected period; trend comparisons use only records available in the source.</span></div></div>}
+          {report.cortex_notice && <div className="notice blue-notice"><Info size={17} /><div><b>Cortex status</b><span>{report.cortex_notice}</span></div></div>}
+          {report.cortex_interpretation && <Card title="Snowflake Cortex interpretation" subtitle="Cortex received bounded NVD aggregates and recent CVE identifiers; validate every recommendation against the source advisory."><div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.65 }}>{report.cortex_interpretation}</div></Card>}
+          <Card title="Near-term defensive watchlist" subtitle="Families ranked by Critical/High CVE disclosures in the latest 30 days. This is a monitoring suggestion based on disclosure momentum, not an attack prediction.">
+            {report.near_term_watchlist.length ? <div className="cluster-grid">{report.near_term_watchlist.map(item => <div className="metric-card" key={`watch-${item.name}`}><small>{item.direction.toUpperCase()}</small><strong className="date-stat">{item.name}</strong><span>{item.reason}</span><p>{item.defensive_action}</p></div>)}</div> : <div className="empty-row">No Critical or High disclosure families were published in the latest 30 days of this window.</div>}
+          </Card>
+          <Card title="Observed attack-family patterns" subtitle="Grouped across all dated Critical and High records; direction compares the latest 30-day rate with the earlier selected window.">
+            <div className="table-wrap"><table>
+              <thead><tr><th>ATTACK FAMILY</th><th>WINDOW</th><th>LAST 30D</th><th>VS BASELINE</th><th>MEAN CVSS</th><th>EXAMPLE CVES</th></tr></thead>
+              <tbody>{report.families.map(family => <tr key={family.name}>
+                <td><b>{family.name}</b><small className="row-desc">{family.critical} Critical · {family.high} High</small></td>
+                <td>{family.count.toLocaleString()}</td><td>{family.latest_30d.toLocaleString()}</td>
+                <td><Badge tone={family.direction === 'rising' || family.direction === 'new in latest 30 days' ? 'red' : family.direction === 'steady' ? 'blue' : 'gray'}>{family.direction}</Badge></td>
+                <td>{family.mean_cvss?.toFixed(2) ?? '—'}</td>
+                <td>{family.cve_examples.map(id => <a key={id} href={`https://nvd.nist.gov/vuln/detail/${encodeURIComponent(id)}`} target="_blank" rel="noreferrer" className="rep-link"><b>{id}</b><ExternalLink size={12} /></a>)}</td>
+              </tr>)}{report.families.length === 0 && <tr><td colSpan={6}><div className="empty-row">No Critical or High records were published in this window.</div></td></tr>}</tbody>
+            </table></div>
+          </Card>
+          <div className="cluster-grid">
+            {report.families.slice(0, 6).map(family => <Card key={`remedy-${family.name}`} title={`Remediation · ${family.name}`} subtitle={`${family.direction} · ${family.latest_30d} in last 30 days`}><p><b>Preferred action:</b> {family.remedy}</p><p><b>Expected outcome:</b> {family.expected_outcome}</p><p className="limitation-footer">Verify affected products and fixed versions in vendor advisories before remediation.</p></Card>)}
+          </div>
+          <Card title="Recently added Critical / High CVEs" subtitle="Most recently published records within the selected observation window.">
+            <div className="table-wrap"><table><thead><tr><th>CVE</th><th>PUBLISHED (UTC)</th><th>SEVERITY</th><th>CVSS</th><th>GROUP</th><th>ACTION</th></tr></thead><tbody>
+              {report.recent_high_critical.map(item => <tr key={item.cve_id}><td><b className="mono">{item.cve_id}</b></td><td>{item.published ? new Date(item.published).toLocaleString() : '—'}</td><td><SeverityBadge severity={item.severity} /></td><td>{item.cvss_score?.toFixed(1) ?? '—'}</td><td>{item.attack_family}</td><td><a className="icon-button" href={item.source_url} target="_blank" rel="noreferrer" aria-label={`Open NVD record ${item.cve_id}`}><ExternalLink size={14} /></a></td></tr>)}
+              {report.recent_high_critical.length === 0 && <tr><td colSpan={6}><div className="empty-row">No recent Critical or High CVEs in the selected window.</div></td></tr>}
+            </tbody></table></div>
+          </Card>
+          <div className="notice"><Info size={17} /><div><b>Method and limits</b><span>{report.method} {report.limitations}</span></div></div>
+        </>}
+      </Card>
+    </section>
   );
 }
 
