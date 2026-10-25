@@ -1,15 +1,10 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "npm --prefix frontend install && npm --prefix frontend run build",
-  "outputDirectory": "frontend/dist",
+  "buildCommand": "npm --prefix frontend install && npm --prefix frontend run build && node scripts/copy-frontend.mjs",
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "/api"
-    },
-    {
-      "source": "/api",
-      "destination": "/api"
+      "destination": "/api/index.py"
     },
     {
       "source": "/((?!assets/|favicon.ico).*)",
@@ -17,7 +12,7 @@
     }
   ],
   "functions": {
-    "api/*.py": {
+    "api/index.py": {
       "maxDuration": 60,
       "excludeFiles": "{.env,.env.*,**/.env,**/.env.*,**/tests/**,**/*.test.*,**/node_modules/**,**/.venv/**,data/external/**,data/vulnerabilities.full.json,data/vulnerabilities.full.json.gz,data/vulnerabilities.full.parquet}"
     }
