@@ -81,12 +81,12 @@ def create_app(test_config=None):
         # Allow short browser caching for GET API responses (data refreshes
         # every 60s server-side anyway). POST / mutating requests stay no-store.
         if flask_request.path.startswith("/api/"):
-            if flask_request.method == "GET":
+            if flask_request.method == "GET" and response.status_code == 200:
                 response.headers.setdefault(
                     "Cache-Control", "public, max-age=30"
                 )
             else:
-                response.headers.setdefault("Cache-Control", "no-store")
+                response.headers["Cache-Control"] = "no-store"
         return response
 
     # ── Blueprints ────────────────────────────────────────────────────
@@ -131,7 +131,16 @@ def create_app(test_config=None):
     @app.errorhandler(404)
     def not_found(_):
         return jsonify({
-            "error": {"code": "not_found", "message": "Resource not found."}
+            "error": {"code": "not_found", "message": "Resource not found."},
+            "debug": {
+                "request_path": flask_request.path,
+                "path_info": flask_request.environ.get("PATH_INFO"),
+                "query_string": flask_request.environ.get("QUERY_STRING"),
+                "x_matched_path": flask_request.environ.get("HTTP_X_MATCHED_PATH"),
+                "x_forwarded_uri": flask_request.environ.get("HTTP_X_FORWARDED_URI"),
+                "request_uri": flask_request.environ.get("REQUEST_URI"),
+                "raw_uri": flask_request.environ.get("RAW_URI"),
+            }
         }), 404
 
     @app.errorhandler(405)
