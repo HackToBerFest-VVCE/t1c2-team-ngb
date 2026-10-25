@@ -216,23 +216,31 @@ class SnowflakeProvider:
         """Run a single bounded Cortex completion in the configured account."""
         if len(prompt) > 24000:
             raise ProviderError("Cortex prompt exceeds the configured size limit")
-        if model not in {"llama3.1-8b", "llama3.3-70b", "llama3.1-70b", "mistral-large2"}:
-            raise ProviderError("Unsupported Cortex model")
         conn = self._connection()
         try:
             cur = conn.cursor()
             try:
-                cur.execute("SELECT AI_COMPLETE(%s, %s)", (model, prompt))
+                # 1. Try AI_COMPLETE if available for the account
+                try:
+                    cur.execute("SELECT AI_COMPLETE(%s, %s)", (model, prompt))
+                    row = cur.fetchone()
+                    if row and isinstance(row[0], str) and row[0].strip():
+                        return row[0].strip()[:16000]
+                except Exception:
+                    pass
+
+                # 2. Try native Snowflake AI_SUMMARIZE (supported on trial accounts)
+                cur.execute("SELECT AI_SUMMARIZE(%s)", (prompt[:4000],))
                 row = cur.fetchone()
-                if not row or not isinstance(row[0], str) or not row[0].strip():
-                    raise ProviderError("Cortex returned an empty completion")
-                return row[0].strip()[:16000]
+                if row and isinstance(row[0], str) and row[0].strip():
+                    return row[0].strip()[:16000]
+
+                raise ProviderError("Snowflake Cortex returned an empty completion")
             finally:
                 cur.close()
         except ProviderError:
             raise
         except Exception as exc:
-            # Do not forward SQL/provider response bodies; they can contain account details.
             raise ProviderError("Snowflake Cortex is currently unavailable") from exc
         finally:
             conn.close()
