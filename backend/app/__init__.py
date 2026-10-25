@@ -127,16 +127,7 @@ def create_app(test_config=None):
     @app.errorhandler(404)
     def not_found(_):
         return jsonify({
-            "error": {"code": "not_found", "message": "Resource not found."},
-            "debug": {
-                "request_path": flask_request.path,
-                "path_info": flask_request.environ.get("PATH_INFO"),
-                "query_string": flask_request.environ.get("QUERY_STRING"),
-                "x_matched_path": flask_request.environ.get("HTTP_X_MATCHED_PATH"),
-                "x_forwarded_uri": flask_request.environ.get("HTTP_X_FORWARDED_URI"),
-                "request_uri": flask_request.environ.get("REQUEST_URI"),
-                "raw_uri": flask_request.environ.get("RAW_URI"),
-            }
+            "error": {"code": "not_found", "message": "Resource not found."}
         }), 404
 
     @app.errorhandler(405)
