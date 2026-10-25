@@ -14,7 +14,7 @@ from typing import Literal
 
 import pandas as pd
 from flask import Blueprint, Response, jsonify, request
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from ..analytics.core import add_priority, metrics, ml_results, safe_records
 from ..services.ai import AIServiceError, MODELS, analyze, analyze_locally, configuration, provider_options, select_cve_examples
@@ -177,23 +177,32 @@ def vulnerabilities():
             frame = frame[frame.severity.isin(vals)]
 
         # ── Date range filter ─────────────────────────────────────────
+        date_bounds: dict[str, pd.Timestamp] = {}
         for param, comparator in (("from", "ge"), ("to", "le")):
             val = request.args.get(param)
             if val:
                 try:
                     dt = pd.to_datetime(val, utc=True, errors="raise")
+                    # Date inputs represent calendar days; include the full
+                    # selected end date instead of stopping at midnight.
+                    if comparator == "le" and len(val) == 10:
+                        dt = dt + pd.Timedelta(days=1) - pd.Timedelta(nanoseconds=1)
                 except Exception:
                     return _error(
                         "invalid_parameter",
                         f"{param} must be an ISO date.",
                         400,
                     )
+                date_bounds[param] = dt
                 if comparator == "ge":
                     frame = frame[frame.published >= dt]
                 else:
                     frame = frame[frame.published <= dt]
+        if "from" in date_bounds and "to" in date_bounds and date_bounds["from"] > date_bounds["to"]:
+            return _error("invalid_parameter", "from cannot be after to.", 400)
 
         # ── Score range filter ────────────────────────────────────────
+        score_bounds: dict[str, float] = {}
         for param, comparator in (("min_score", "ge"), ("max_score", "le")):
             val = request.args.get(param)
             if val:
@@ -211,10 +220,13 @@ def vulnerabilities():
                         f"{param} must be between 0 and 10.",
                         400,
                     )
+                score_bounds[param] = score
                 if comparator == "ge":
                     frame = frame[frame.cvss_score >= score]
                 else:
                     frame = frame[frame.cvss_score <= score]
+        if score_bounds.get("min_score", 0) > score_bounds.get("max_score", 10):
+            return _error("invalid_parameter", "min_score cannot exceed max_score.", 400)
 
         # ── CWE filter ────────────────────────────────────────────────
         cwe = request.args.get("cwe")
@@ -559,12 +571,58 @@ def data_quality():
 def report_summary():
     """Generate a report summary for the active analysis scope."""
     frame = _records()
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(timezone.utc)
+    window_start = now - pd.Timedelta(days=30)
+    dated = frame.published.dropna()
+    ml = ml_results(frame)
+    training_report = None
+    try:
+        training_path = ROOT / "data" / "models" / "training_report.json"
+        raw_training = json.loads(training_path.read_text(encoding="utf-8"))
+        tasks = []
+        for source_name, source_data in raw_training.get("sources", {}).items():
+            for task_name, task_data in source_data.items():
+                if not isinstance(task_data, dict) or "status" not in task_data:
+                    continue
+                scores = task_data.get("metrics", {})
+                tasks.append({
+                    "source": source_name,
+                    "task": task_data.get("task", task_name),
+                    "status": task_data.get("status"),
+                    "test_rows": task_data.get("test_rows"),
+                    "accuracy": scores.get("accuracy"),
+                    "macro_f1": scores.get("macro_f1"),
+                    "limitations": task_data.get("limitations") or task_data.get("reason"),
+                })
+        training_report = {
+            "trained_at": raw_training.get("trained_at"),
+            "random_state": raw_training.get("random_state"),
+            "notice": raw_training.get("notice"),
+            "tasks": tasks,
+        }
+    except (OSError, json.JSONDecodeError):
+        pass
 
     return jsonify({
-        "generated_at": now,
+        "generated_at": now.isoformat(),
+        "reporting_period": {
+            "start": window_start.isoformat(),
+            "end": now.isoformat(),
+            "label": "Rolling 30-day UTC publication window; corpus-wide metrics use all loaded records",
+        },
+        "source_coverage": {
+            "from": dated.min().isoformat() if not dated.empty else None,
+            "to": dated.max().isoformat() if not dated.empty else None,
+            "dated_records": int(len(dated)),
+        },
         "source": get_provider().status(),
         "metrics": metrics(frame),
+        "ml": {
+            "available": ml.get("available", False),
+            "reason": ml.get("reason"),
+            "evaluation": ml.get("evaluation", {}),
+        },
+        "supervised_models": training_report,
         "prioritized": _public_rows(
             frame.sort_values(
                 "priority_score", ascending=False, na_position="last"
@@ -584,9 +642,17 @@ def report_summary():
 
 class ExportRequest(BaseModel):
     """Validated export request body."""
+    model_config = ConfigDict(populate_by_name=True)
     format: Literal["csv", "json"] = "csv"
     q: str = Field(default="", max_length=200)
     severity: list[str] = Field(default_factory=list)
+    from_date: str | None = Field(default=None, alias="from", max_length=40)
+    to_date: str | None = Field(default=None, alias="to", max_length=40)
+    min_score: float | None = Field(default=None, ge=0, le=10)
+    max_score: float | None = Field(default=None, ge=0, le=10)
+    cwe: str | None = Field(default=None, max_length=100)
+    sort: Literal["published", "cvss_score", "priority_score", "cve_id"] = "published"
+    order: Literal["asc", "desc"] = "desc"
 
 
 @api.post("/reports/export")
@@ -600,6 +666,20 @@ def export_report():
         return _error("invalid_request", exc.errors()[0]["msg"], 400)
 
     frame = _records()
+
+    if body.min_score is not None and body.max_score is not None and body.min_score > body.max_score:
+        return _error("invalid_request", "min_score cannot exceed max_score.", 400)
+    parsed_dates: dict[str, pd.Timestamp] = {}
+    for key, value in (("from", body.from_date), ("to", body.to_date)):
+        if value:
+            try:
+                parsed_dates[key] = pd.to_datetime(value, utc=True, errors="raise")
+                if key == "to" and len(value) == 10:
+                    parsed_dates[key] += pd.Timedelta(days=1) - pd.Timedelta(nanoseconds=1)
+            except Exception:
+                return _error("invalid_request", f"{key} must be an ISO date.", 400)
+    if "from" in parsed_dates and "to" in parsed_dates and parsed_dates["from"] > parsed_dates["to"]:
+        return _error("invalid_request", "from cannot be after to.", 400)
 
     # ── Apply optional text filter ────────────────────────────────────
     if body.q:
@@ -619,6 +699,18 @@ def export_report():
         if not upper.issubset(allowed):
             return _error("invalid_request", "Unsupported severity.", 400)
         frame = frame[frame.severity.isin(upper)]
+
+    if "from" in parsed_dates:
+        frame = frame[frame.published >= parsed_dates["from"]]
+    if "to" in parsed_dates:
+        frame = frame[frame.published <= parsed_dates["to"]]
+    if body.min_score is not None:
+        frame = frame[frame.cvss_score >= body.min_score]
+    if body.max_score is not None:
+        frame = frame[frame.cvss_score <= body.max_score]
+    if body.cwe:
+        frame = frame[frame.cwe.fillna("").astype(str).str.contains(body.cwe, case=False, regex=False)]
+    frame = frame.sort_values(body.sort, ascending=(body.order == "asc"), na_position="last")
 
     # ── JSON export ───────────────────────────────────────────────────
     if body.format == "json":

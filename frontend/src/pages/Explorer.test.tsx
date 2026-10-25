@@ -5,6 +5,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import Explorer from './Explorer';
+import { api, downloadExport } from '../api';
 
 vi.mock('../api', () => ({
   api: vi.fn((url: string) => {
@@ -29,7 +30,7 @@ vi.mock('../api', () => ({
       pages: 1,
     });
   }),
-  downloadExport: vi.fn(),
+  downloadExport: vi.fn().mockResolvedValue(undefined),
 }));
 
 describe('Vulnerability Explorer', () => {
@@ -61,6 +62,28 @@ describe('Vulnerability Explorer', () => {
     await waitFor(() => {
       expect(screen.getByText('SOURCE RECORD INSPECTION')).toBeInTheDocument();
       expect(screen.getByText('Enterprise Server 2026')).toBeInTheDocument();
+    });
+  });
+
+  it('sends date, score, and CWE filters to the API and preserves them in exports', async () => {
+    render(<Explorer />);
+    await screen.findByText('CVE-2026-9999');
+
+    fireEvent.change(screen.getByLabelText('Published from'), { target: { value: '2026-01-01' } });
+    fireEvent.change(screen.getByLabelText('CVSS minimum'), { target: { value: '7.5' } });
+    fireEvent.change(screen.getByLabelText('CWE'), { target: { value: 'CWE-78' } });
+
+    await waitFor(() => {
+      expect(api).toHaveBeenCalledWith(expect.stringContaining('from=2026-01-01'));
+      expect(api).toHaveBeenCalledWith(expect.stringContaining('min_score=7.5'));
+      expect(api).toHaveBeenCalledWith(expect.stringContaining('cwe=CWE-78'));
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Export as CSV' }));
+    await waitFor(() => {
+      expect(downloadExport).toHaveBeenCalledWith('csv', expect.objectContaining({
+        from: '2026-01-01', min_score: '7.5', cwe: 'CWE-78',
+      }));
     });
   });
 });

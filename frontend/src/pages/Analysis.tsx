@@ -317,7 +317,7 @@ export function Risk() {
   // Compute simulated priority score
   const simScore = useMemo(() => {
     const cvssNorm = Math.min(1.0, Math.max(0.0, simCvss / 10.0));
-    const recency = Math.max(0.0, 1.0 - simDays / 730.0);
+    const recency = Math.max(0.0, 1.0 - simDays / 365.0);
     const raw = 0.8 * cvssNorm + 0.2 * recency;
     return Math.round(raw * 1000) / 10;
   }, [simCvss, simDays]);
@@ -391,7 +391,7 @@ export function Risk() {
                   <input
                     type="range"
                     min="0"
-                    max="730"
+                    max="365"
                     step="5"
                     value={simDays}
                     onChange={e => setSimDays(parseInt(e.target.value, 10))}
@@ -1101,6 +1101,22 @@ export function Reports() {
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
 
+    const table = (rows: Array<{ name: string; count: number }>) =>
+      rows.length
+        ? rows.map(item => `<tr><td>${esc(item.name)}</td><td class="number">${Number(item.count).toLocaleString()}</td></tr>`).join('')
+        : '<tr><td colspan="2">No values reported by the source.</td></tr>';
+    const periodStart = new Date(summary.reporting_period.start).toLocaleString('en', { timeZone: 'UTC', dateStyle: 'medium', timeStyle: 'short' }) + ' UTC';
+    const periodEnd = new Date(summary.reporting_period.end).toLocaleString('en', { timeZone: 'UTC', dateStyle: 'medium', timeStyle: 'short' }) + ' UTC';
+    const mlEval = summary.ml?.evaluation ?? {};
+    const supervisedTasks: Array<{
+      task: string;
+      source: string;
+      status: string;
+      test_rows?: number | null;
+      accuracy?: number | null;
+      macro_f1?: number | null;
+    }> = summary.supervised_models?.tasks ?? [];
+
     const htmlContent = `<!doctype html>
 <html lang="en">
 <head>
@@ -1151,6 +1167,7 @@ export function Reports() {
     table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 14px; }
     th { text-align: left; padding: 10px; border-bottom: 2px solid var(--border); color: var(--muted); text-transform: uppercase; font-size: 12px; }
     td { padding: 10px; border-bottom: 1px solid var(--border); }
+    .number { text-align: right; font-variant-numeric: tabular-nums; }
     .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 600; }
     .badge-crit { color: var(--red); font-weight: bold; }
     .badge-high { color: var(--amber); font-weight: bold; }
@@ -1163,18 +1180,32 @@ export function Reports() {
     <div class="meta">
       Generated: ${new Date(summary.generated_at).toLocaleString()} |
       Source: ${esc(summary.source.dataset)} (${esc(summary.source.mode)}) |
-      Scope: ${esc(summary.metrics.analysis_scope)}
+      Scope: ${esc(summary.metrics.analysis_scope)}<br>
+      Reporting period: ${esc(periodStart)} to ${esc(periodEnd)}<br>
+      Source publication coverage: ${summary.source_coverage.from ? esc(new Date(summary.source_coverage.from).toLocaleDateString()) : 'unknown'} to ${summary.source_coverage.to ? esc(new Date(summary.source_coverage.to).toLocaleDateString()) : 'unknown'} (${summary.source_coverage.dated_records.toLocaleString()} dated records)
     </div>
   </div>
 
   <div class="card">
     <h2>Executive Summary & High-Water Observations</h2>
     <p>
-      An analysis of <b>${summary.metrics.total.toLocaleString()}</b> verified vulnerability records identified
+      An analysis of <b>${summary.metrics.total.toLocaleString()}</b> loaded vulnerability records identified
       <b>${summary.metrics.critical.toLocaleString()}</b> Critical severity and <b>${summary.metrics.high.toLocaleString()}</b>
       High severity items. A total of <b>${summary.metrics.new_30d.toLocaleString()}</b> CVEs were published within the recent
       30-day observation window.
     </p>
+  </div>
+
+  <div class="card">
+    <h2>Dataset observations</h2>
+    <p><b>Severity counts</b></p>
+    <table><thead><tr><th>Source severity</th><th class="number">Records</th></tr></thead><tbody>${table(summary.metrics.severity)}</tbody></table>
+    <p><b>Most frequent CWE values</b></p>
+    <table><thead><tr><th>CWE</th><th class="number">Records</th></tr></thead><tbody>${table(summary.metrics.top_cwe)}</tbody></table>
+    <p><b>Most frequent affected products</b></p>
+    <table><thead><tr><th>Product / technology</th><th class="number">Records</th></tr></thead><tbody>${table(summary.metrics.top_products)}</tbody></table>
+    <p><b>Monthly publication counts (latest available months)</b></p>
+    <table><thead><tr><th>Publication month (UTC)</th><th class="number">Records</th></tr></thead><tbody>${table(summary.metrics.publication_trend.map((item: { month: string; count: number }) => ({ name: item.month, count: item.count })))}</tbody></table>
   </div>
 
   <div class="card">
@@ -1208,9 +1239,35 @@ export function Reports() {
   </div>
 
   <div class="card">
-    <h2>Methodology & Rigor Statement</h2>
+    <h2>Model and evaluation details</h2>
+    ${summary.ml?.available ? `<p><b>Clustering:</b> ${esc(mlEval.method ?? 'Unsupervised TF-IDF and K-means')}</p><p><b>Silhouette:</b> ${mlEval.silhouette == null ? 'Not defined for this sample' : esc(mlEval.silhouette)} — ${esc(mlEval.silhouette_note ?? '')}</p><p><b>Baseline:</b> ${esc(mlEval.baseline ?? 'Not available')} ${mlEval.baseline_score == null ? '' : `(${esc(mlEval.baseline_score)})`}</p><p><b>Model sample:</b> ${mlEval.model_sample_size?.toLocaleString?.() ?? 'not reported'} of ${mlEval.dataset_size?.toLocaleString?.() ?? 'not reported'} records with descriptions.</p><p><b>Anomaly method:</b> ${esc(mlEval.anomaly_method ?? 'Not reported')}</p><p><b>ML limitations:</b> ${esc(mlEval.limitations ?? 'Unsupervised outputs are indicators, not evidence of exploitation.')}</p>` : `<p>ML analysis was unavailable. ${esc(summary.ml?.reason ?? 'The source did not contain enough usable descriptions.')}</p>`}
+    <p>Unsupervised scores do not have labeled ground truth and are not classification accuracy.</p>
+  </div>
+
+  <div class="card">
+    <h2>Separate supervised task models</h2>
+    <p>These models were trained from separate public Hugging Face task datasets. They are not trained from this active Snowflake CVE table and are not used as vulnerability evidence.</p>
+    <table><thead><tr><th>Task</th><th>Dataset</th><th>Status</th><th>Held-out rows</th><th>Accuracy</th><th>Macro F1</th></tr></thead><tbody>
+      ${supervisedTasks.length ? supervisedTasks.map(task => `<tr><td>${esc(task.task)}</td><td>${esc(task.source)}</td><td>${esc(task.status)}</td><td>${task.test_rows == null ? '—' : Number(task.test_rows).toLocaleString()}</td><td>${task.accuracy == null ? '—' : Number(task.accuracy).toFixed(3)}</td><td>${task.macro_f1 == null ? '—' : Number(task.macro_f1).toFixed(3)}</td></tr>`).join('') : '<tr><td colspan="6">No supervised training report is available.</td></tr>'}
+    </tbody></table>
+    <p>${esc(summary.supervised_models?.notice ?? 'Held-out scores describe the separate task datasets only; they do not establish real-world detection capability.')}</p>
+    ${summary.supervised_models?.trained_at ? `<p>Training report timestamp: ${esc(summary.supervised_models.trained_at)} · random state ${esc(summary.supervised_models.random_state ?? 'not reported')}.</p>` : ''}
+  </div>
+
+  <div class="card">
+    <h2>Methodology & limitations</h2>
     <p><b>Prioritization Model:</b> ${esc(summary.method)}</p>
     <p><b>Boundary & Limitations:</b> ${esc(summary.limitations)}</p>
+    <p><b>Dataset boundary:</b> NVD-origin data stored in Snowflake. This account table is not itself proof of a Snowflake Marketplace listing. Missing source fields remain unknown; the analysis does not infer exploitation.</p>
+  </div>
+
+  <div class="card">
+    <h2>Recommended next investigative steps</h2>
+    <ol>
+      <li>Confirm whether any prioritized CVE affects assets in the organization's inventory and record the affected product/version evidence.</li>
+      <li>Verify each candidate against the linked NVD record and vendor advisory; check an authoritative exploitation source before assigning active-threat status.</li>
+      <li>Route confirmed applicable findings through the organization's patch, exception, and incident-response process; preserve the reporting window and export for audit.</li>
+    </ol>
   </div>
 
   <div class="footer">
@@ -1245,7 +1302,7 @@ export function Reports() {
               className="button-secondary"
               onClick={() => {
                 showToast('Exporting CSV records...', 'info');
-                downloadExport('csv');
+                downloadExport('csv').catch((err: Error) => showToast(err.message || 'Export failed', 'error'));
               }}
             >
               <Download size={15} /> Export CSV
@@ -1416,8 +1473,8 @@ export function Settings({ source }: { source?: SourceStatus }) {
             <div>
               <b>Data Attribution</b>
               <p>
-                NIST National Vulnerability Database (NVD API 2.0). All CVE identifiers and CVSS
-                metrics are curated by NIST.
+                {source?.provider ?? 'NIST National Vulnerability Database (NVD API 2.0)'}.
+                NVD-origin records and third-party feed data remain attributed to their providers.
               </p>
             </div>
             <a
@@ -1439,7 +1496,7 @@ export function Settings({ source }: { source?: SourceStatus }) {
           <div className="setting-row">
             <div>
               <b>Priority Heuristic Weights</b>
-              <p>80% normalized CVSS score + 20% publication recency decay (730-day window).</p>
+              <p>80% normalized CVSS score + 20% publication recency decay to zero over 365 days.</p>
             </div>
             <Badge tone="blue">0.8 / 0.2 WEIGHT</Badge>
           </div>
@@ -1458,6 +1515,33 @@ export function Settings({ source }: { source?: SourceStatus }) {
               <p>Snowflake reads bounded to 500,000 by default (1,000,000 maximum). REST API endpoints paginate up to 100 rows.</p>
             </div>
             <Badge tone="gray">BOUNDED</Badge>
+          </div>
+        </Card>
+
+        <Card
+          title="Dataset terms, refresh, and defaults"
+          subtitle="Project-code licensing does not replace source-data terms"
+        >
+          <div className="setting-row">
+            <div>
+              <b>Dataset and attribution</b>
+              <p>NVD CVE API 2.0 public vulnerability records. This Snowflake table contains NVD-origin data, not a Marketplace listing. Review NVD usage terms before republishing refreshed data; MIT applies to project code only.</p>
+            </div>
+            <a className="text-action" href="https://nvd.nist.gov/developers/start-here" target="_blank" rel="noreferrer">NVD terms & API <ExternalLink size={13} /></a>
+          </div>
+          <div className="setting-row">
+            <div>
+              <b>Default reporting windows</b>
+              <p>Overview's new-publication metric uses a rolling 30-day UTC window. Threat Trends opens on 365 days; choose a shorter or longer window to match source coverage.</p>
+            </div>
+            <Badge tone="blue">UTC</Badge>
+          </div>
+          <div className="setting-row">
+            <div>
+              <b>Privacy and configuration</b>
+              <p>Credentials stay in backend environment variables. Data-source and AI provider configuration is controlled by the server; this screen never displays secrets.</p>
+            </div>
+            <Badge tone="green">BACKEND ONLY</Badge>
           </div>
         </Card>
 

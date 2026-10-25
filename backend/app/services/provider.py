@@ -10,7 +10,9 @@ import json
 import os
 import re
 import time
+from datetime import datetime, timezone
 from pathlib import Path
+from threading import RLock
 
 import pandas as pd
 
@@ -27,6 +29,8 @@ TABLE_RE = re.compile(
 # ── Process-level cache for fully normalised records ──────────────────
 _RECORDS_CACHE: tuple[float, int, int, pd.DataFrame] | None = None
 _RECORDS_TTL = 60  # seconds
+_SNOWFLAKE_LAST_REFRESH: str | None = None
+_RECORDS_LOCK = RLock()
 
 
 class ProviderError(RuntimeError):
@@ -179,6 +183,7 @@ class SnowflakeProvider:
             ) from exc
 
     def records(self) -> pd.DataFrame:
+        global _SNOWFLAKE_LAST_REFRESH
         table = self._config()["SNOWFLAKE_TABLE"]
         try:
             row_limit = int(os.getenv("SNOWFLAKE_MAX_ROWS", "500000"))
@@ -197,7 +202,9 @@ class SnowflakeProvider:
                     (row_limit,),
                 )
                 cols = [x[0].lower() for x in cur.description]
-                return pd.DataFrame(cur.fetchall(), columns=cols)
+                frame = pd.DataFrame(cur.fetchall(), columns=cols)
+                _SNOWFLAKE_LAST_REFRESH = datetime.now(timezone.utc).isoformat()
+                return frame
             finally:
                 cur.close()
         except ProviderError:
@@ -210,8 +217,7 @@ class SnowflakeProvider:
             conn.close()
 
     def status(self) -> dict:
-        frame = self.records()
-        rejected = _rejected_mask(frame)
+        frame = get_records()
         return {
             "mode": "LIVE",
             "connected": True,
@@ -221,8 +227,8 @@ class SnowflakeProvider:
                 f"{os.getenv('SNOWFLAKE_TABLE')}"
             ),
             "provider": "Configured Snowflake table",
-            "updated_at": None,
-            "record_count": int((~rejected).sum()),
+            "updated_at": _SNOWFLAKE_LAST_REFRESH,
+            "record_count": int(len(frame)),
             "note": "Live Snowflake data; results bounded by SNOWFLAKE_MAX_ROWS.",
         }
 
@@ -252,6 +258,12 @@ def get_provider():
 
 
 def get_records() -> pd.DataFrame:
+    """Return the active normalized snapshot, coalescing concurrent loads."""
+    with _RECORDS_LOCK:
+        return _load_records()
+
+
+def _load_records() -> pd.DataFrame:
     """Fetch, normalise, and clean records from the active provider.
 
     Results are cached for up to ``_RECORDS_TTL`` seconds so that rapid

@@ -27,28 +27,38 @@ vi.mock('recharts', () => ({
 // Mock API client
 vi.mock('../api', () => ({
   api: vi.fn((path: string) => {
-    if (path === '/metrics') {
+    if (path === '/summary') {
       return Promise.resolve({
-        total: 12,
-        critical: 2,
-        high: 3,
-        medium: 5,
-        low: 2,
-        new_30d: 1,
-        avg_cvss: 7.2,
-        severity: [
-          { name: 'CRITICAL', value: 2 },
-          { name: 'HIGH', value: 3 },
-          { name: 'MEDIUM', value: 5 },
-          { name: 'LOW', value: 2 },
-        ],
-        publication_trend: [
-          { month: '2026-01', count: 4 },
-          { month: '2026-02', count: 8 },
-        ],
-        top_cwe: [{ name: 'CWE-79', count: 4 }],
-        top_products: [{ name: 'Apache HTTP Server', count: 3 }],
-        analysis_scope: 'All sample records',
+        metrics: {
+          total: 12,
+          critical: 2,
+          high: 3,
+          medium: 5,
+          low: 2,
+          new_30d: 1,
+          avg_cvss: 7.2,
+          severity: [
+            { name: 'CRITICAL', value: 2 },
+            { name: 'HIGH', value: 3 },
+            { name: 'MEDIUM', value: 5 },
+            { name: 'LOW', value: 2 },
+          ],
+          publication_trend: [
+            { month: '2026-01', count: 4 },
+            { month: '2026-02', count: 8 },
+          ],
+          top_cwe: [{ name: 'CWE-79', count: 4 }],
+          top_products: [{ name: 'Apache HTTP Server', count: 3 }],
+          analysis_scope: 'All sample records',
+        },
+        recent: [{
+          cve_id: 'CVE-2026-1001',
+          description: 'Critical buffer overflow in network service.',
+          published: '2026-02-15T00:00:00Z',
+          cvss_score: 9.8,
+          severity: 'CRITICAL',
+          source_url: 'https://nvd.nist.gov/vuln/detail/CVE-2026-1001',
+        }],
       });
     }
     if (path.startsWith('/vulnerabilities')) {

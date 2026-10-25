@@ -2179,6 +2179,47 @@ select option:hover {
   gap: 10px;
 }
 
+.explorer-advanced-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
+  gap: 10px;
+  align-items: end;
+  margin: 0 0 18px;
+  padding: 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+}
+
+.explorer-advanced-filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.explorer-advanced-filters input,
+.explorer-advanced-filters select {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 9px;
+  color: var(--text-primary);
+  background: var(--bg-input);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  font: inherit;
+}
+
+.explorer-reset {
+  min-height: 35px;
+}
+
+@media (max-width: 640px) {
+  .explorer-advanced-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
 .select-wrap {
   position: relative;
   display: flex;

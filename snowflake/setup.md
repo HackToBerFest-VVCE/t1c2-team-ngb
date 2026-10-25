@@ -1,6 +1,6 @@
 # Connect a Snowflake cybersecurity dataset
 
-ThreatLens can read a live Snowflake table or view. The repository does not include Snowflake account credentials, and no Marketplace dataset has been installed or verified here. Select and install the dataset in your Snowflake account first; do not use `SNOWFLAKE_SAMPLE_DATA` TPC-H/TPC-DS as threat intelligence.
+ThreatLens can read a live Snowflake table or view. This workspace is connected to an NVD CVE table in the user's account. The source is NVD-origin data stored in Snowflake, not a Marketplace dataset. Do not use `SNOWFLAKE_SAMPLE_DATA` TPC-H/TPC-DS as threat intelligence.
 
 ## Dataset shape
 
@@ -40,8 +40,16 @@ Restart Flask, then check `GET /api/health` and `GET /api/data-sources`. The sou
 
 ## NVD alternative
 
-The included `python -m backend.app.data.nvd_sync --start-year 2002 --target snowflake` command loads official NVD feeds into a writable canonical table. This is NVD-origin data stored in Snowflake, not a Snowflake Marketplace dataset. It is useful for development but must not be presented as the Marketplace source.
+The included `python -m backend.app.data.nvd_sync --start-year 2002 --target snowflake` command loads official NVD feeds into a writable canonical table. This is NVD-origin data stored in Snowflake, not a Snowflake Marketplace dataset. Importing requires write grants; the app service identity is read-only.
 
 ## Current verification
 
-The Python connector path and setup are implemented, including direct read-only table/view access and optional key-pair authentication. No live connection, Marketplace listing, dataset schema, or account-specific training run has been verified because account access and the dataset identity are not present in this workspace.
+The live connection was verified through `GET /api/health` on October 25, 2026. The API returned `LIVE`, connected, and read 160,846 active records from `THREATLENS_DB.THREATLENS.VULNERABILITIES` (after excluding NVD rejected/withdrawn CVEs). The source has 164,568 rows and distinct CVE IDs, including 3,722 rejected/withdrawn rows. Published values range from 2023-11-28 through 2026-10-24. The app uses service user `THREATLENS_APP_SVC`, role `THREATLENS_APP_ROLE`, a PKCS#8 private key stored outside the repository, and an X-Small warehouse `THREATLENS_WH` with 60-second auto-suspend. Resource monitor `THREATLENS_NVD_MONITOR` caps warehouse consumption at 2 credits per month and suspends at the cap. The service role has SELECT access and no table write or schema create grants. This table is NVD-origin data, not Marketplace data.
+
+### Verified source schema and quality (October 25, 2026)
+
+`DESC TABLE THREATLENS_DB.THREATLENS.VULNERABILITIES` returned the following columns: `CVE_ID VARCHAR NOT NULL PRIMARY KEY`; `DESCRIPTION VARCHAR`; `PUBLISHED TIMESTAMP_TZ(9)`; `LAST_MODIFIED TIMESTAMP_TZ(9)`; `CVSS_SCORE FLOAT`; `SEVERITY VARCHAR`; `CWE VARCHAR`; `AFFECTED_PRODUCTS VARCHAR`; `SOURCE_URL VARCHAR`; `INGESTED_AT TIMESTAMP_TZ(9) DEFAULT CURRENT_TIMESTAMP()` (all fields except CVE_ID are nullable).
+
+Read-only aggregate results from that same table: NULL CVSS 7,378; NULL severity 0; NULL CWE 10,304; NULL affected-products 73,337. Severity values after excluding rejected records: MEDIUM 69,947; HIGH 60,305; CRITICAL 16,278; LOW 10,558; UNKNOWN 3,656; NONE 102. Top CWE tokens: CWE-79 22,051; CWE-89 9,984; CWE-862 8,227; NVD-CWE-noinfo 8,062; CWE-284 6,096; CWE-416 4,837; CWE-22 4,736; CWE-74 4,726; CWE-787 4,421; CWE-125 4,192. These CWE token counts can exceed record counts because a CVE can contain more than one CWE value.
+
+`snowflake/exploration.sql` contains the reproducible `DESC` and `SELECT` statements used for schema and quality review. These results came from the service role's direct Snowflake SQL calls, not from CoCo.

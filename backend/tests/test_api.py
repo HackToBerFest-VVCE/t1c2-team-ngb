@@ -194,8 +194,10 @@ class TestNVDFeedParsing:
 # ─────────────────────────────────────────────────────────────────────
 
 @pytest.fixture
-def client():
+def client(monkeypatch):
     """Create a test client."""
+    # Keep the suite deterministic and independent of local Snowflake credentials.
+    monkeypatch.setenv("DATA_SOURCE", "demo")
     app = create_app({"TESTING": True})
     return app.test_client()
 
@@ -271,6 +273,12 @@ class TestVulnerabilities:
     def test_score_filter_non_numeric(self, client):
         r = client.get("/api/vulnerabilities?min_score=abc")
         assert r.status_code == 400
+
+    def test_reversed_filter_ranges_rejected(self, client):
+        dates = client.get("/api/vulnerabilities?from=2026-10-25&to=2026-10-24")
+        scores = client.get("/api/vulnerabilities?min_score=8&max_score=3")
+        assert dates.status_code == 400
+        assert scores.status_code == 400
 
 
 class TestVulnerabilityDetail:
@@ -377,6 +385,9 @@ class TestReports:
         assert "generated_at" in data
         assert "metrics" in data
         assert "prioritized" in data
+        assert data["reporting_period"]["label"].startswith("Rolling 30-day UTC")
+        assert "source_coverage" in data
+        assert "evaluation" in data["ml"]
 
     def test_export_csv(self, client):
         r = client.post(

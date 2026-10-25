@@ -46,6 +46,18 @@ export interface PaginatedResponse<T> {
   pages: number;
 }
 
+export interface VulnerabilityFilters {
+  q?: string;
+  severity?: string[];
+  from?: string;
+  to?: string;
+  min_score?: string;
+  max_score?: string;
+  cwe?: string;
+  sort?: 'published' | 'cvss_score' | 'priority_score' | 'cve_id';
+  order?: 'asc' | 'desc';
+}
+
 export interface SourceStatus {
   mode: string;
   connected: boolean;
@@ -137,6 +149,8 @@ export interface MLEvaluation {
   baseline_score: number | null;
   anomaly_method: string;
   limitations: string;
+  dataset_size?: number;
+  model_sample_size?: number;
 }
 
 export interface ClustersResponse {
@@ -170,9 +184,26 @@ export interface DataQualityResponse {
 
 export interface ReportSummary {
   generated_at: string;
+  reporting_period: { start: string; end: string; label: string };
+  source_coverage: { from: string | null; to: string | null; dated_records: number };
   source: SourceStatus;
   metrics: Metrics;
   prioritized: Vulnerability[];
+  ml: { available: boolean; reason?: string; evaluation: MLEvaluation };
+  supervised_models?: {
+    trained_at?: string;
+    random_state?: number;
+    notice?: string;
+    tasks: Array<{
+      source: string;
+      task: string;
+      status: string;
+      test_rows?: number;
+      accuracy?: number;
+      macro_f1?: number;
+      limitations?: string;
+    }>;
+  } | null;
   method: string;
   limitations: string;
 }
@@ -213,13 +244,12 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
  */
 export async function downloadExport(
   format: 'csv' | 'json',
-  q = '',
-  severity: string[] = []
+  filters: VulnerabilityFilters = {}
 ): Promise<void> {
   const response = await fetch(`${BASE}/reports/export`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ format, q, severity }),
+    body: JSON.stringify({ format, ...filters }),
   });
 
   if (!response.ok) {
@@ -232,5 +262,5 @@ export async function downloadExport(
   anchor.href = url;
   anchor.download = `threatlens-vulnerabilities.${format}`;
   anchor.click();
-  URL.revokeObjectURL(url);
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

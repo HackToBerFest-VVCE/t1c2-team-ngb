@@ -17,7 +17,6 @@ def create_app(test_config=None):
     """Create and configure the Flask application."""
     try:
         from dotenv import load_dotenv
-        load_dotenv()
         root = Path(__file__).resolve().parents[2]
         load_dotenv(root / ".env")
         load_dotenv(root / "backend" / ".env")
@@ -171,7 +170,13 @@ def create_app(test_config=None):
     # ── Warm up data cache in background ──────────────────────────────
     # Serverless functions should load data on demand: detached threads may
     # be frozen after a response and compete with request memory.
-    if not os.environ.get("VERCEL"):
+    # DEMO data is local and can be warmed cheaply. Defer LIVE reads until
+    # the first API request so health/source checks share the same Snowflake
+    # query instead of racing a background connection at process startup.
+    if (
+        not os.environ.get("VERCEL")
+        and os.getenv("DATA_SOURCE", "demo").lower() == "demo"
+    ):
         import threading
 
         def _warmup():

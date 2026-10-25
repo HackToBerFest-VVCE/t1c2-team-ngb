@@ -3,10 +3,11 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Ensure .env is loaded regardless of execution cwd
-load_dotenv()
+# Root configuration is authoritative; backend/.env is a local fallback.
+# Environment variables supplied by the process still take precedence.
+ROOT = Path(__file__).resolve().parent.parent
+load_dotenv(ROOT / '.env')
 load_dotenv(Path(__file__).resolve().parent / '.env')
-load_dotenv(Path(__file__).resolve().parent.parent / '.env')
 
 from app import create_app
 app = create_app()

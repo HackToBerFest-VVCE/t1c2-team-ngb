@@ -23,7 +23,7 @@ import {
   X,
 } from 'lucide-react';
 
-import { api, downloadExport, PaginatedResponse, Vulnerability } from '../api';
+import { api, downloadExport, PaginatedResponse, Vulnerability, VulnerabilityFilters } from '../api';
 import {
   Badge,
   Card,
@@ -40,12 +40,31 @@ export default function Explorer() {
   const [severity, setSeverity] = useState('');
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(15);
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+  const [minScore, setMinScore] = useState('');
+  const [maxScore, setMaxScore] = useState('');
+  const [cwe, setCwe] = useState('');
+  const [sort, setSort] = useState<VulnerabilityFilters['sort']>('published');
+  const [order, setOrder] = useState<VulnerabilityFilters['order']>('desc');
   const [data, setData] = useState<PaginatedResponse<Vulnerability> | null>(null);
   const [selectedCve, setSelectedCve] = useState<Vulnerability | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
   const [, startTransition] = useTransition();
+
+  const currentFilters = (): VulnerabilityFilters => ({
+    q: query.trim(),
+    severity: severity && severity !== 'ALL' ? [severity] : [],
+    from: fromDate || undefined,
+    to: toDate || undefined,
+    min_score: minScore || undefined,
+    max_score: maxScore || undefined,
+    cwe: cwe.trim() || undefined,
+    sort,
+    order,
+  });
 
   const loadVulnerabilities = () => {
     setLoading(true);
@@ -56,8 +75,16 @@ export default function Explorer() {
       per_page: String(perPage),
     });
 
-    if (query.trim()) params.append('q', query.trim());
-    if (severity && severity !== 'ALL') params.append('severity', severity);
+    const filters = currentFilters();
+    if (filters.q) params.append('q', filters.q);
+    if (filters.severity?.length) params.append('severity', filters.severity.join(','));
+    if (filters.from) params.append('from', filters.from);
+    if (filters.to) params.append('to', filters.to);
+    if (filters.min_score) params.append('min_score', filters.min_score);
+    if (filters.max_score) params.append('max_score', filters.max_score);
+    if (filters.cwe) params.append('cwe', filters.cwe);
+    if (filters.sort) params.append('sort', filters.sort);
+    if (filters.order) params.append('order', filters.order);
 
     api<PaginatedResponse<Vulnerability>>(`/vulnerabilities?${params.toString()}`)
       .then(res => {
@@ -74,7 +101,7 @@ export default function Explorer() {
 
   useEffect(() => {
     loadVulnerabilities();
-  }, [query, severity, page, perPage]);
+  }, [query, severity, page, perPage, fromDate, toDate, minScore, maxScore, cwe, sort, order]);
 
   // Handle Search Input Change
   const handleSearchChange = (val: string) => {
@@ -95,7 +122,14 @@ export default function Explorer() {
   // Export handlers with notifications
   const handleExport = (format: 'csv' | 'json') => {
     showToast(`Generating ${format.toUpperCase()} export...`, 'info');
-    downloadExport(format, query, severity && severity !== 'ALL' ? [severity] : []);
+    downloadExport(format, currentFilters()).catch((err: Error) => {
+      showToast(err.message || 'Export failed', 'error');
+    });
+  };
+
+  const resetFilters = () => {
+    setQuery(''); setSeverity(''); setFromDate(''); setToDate('');
+    setMinScore(''); setMaxScore(''); setCwe(''); setSort('published'); setOrder('desc'); setPage(1);
   };
 
   return (
@@ -186,6 +220,17 @@ export default function Explorer() {
               </select>
             </div>
           </div>
+        </div>
+
+        <div className="explorer-advanced-filters" aria-label="Advanced vulnerability filters">
+          <label>Published from<input type="date" value={fromDate} onChange={e => { setPage(1); setFromDate(e.target.value); }} /></label>
+          <label>Published to<input type="date" value={toDate} onChange={e => { setPage(1); setToDate(e.target.value); }} /></label>
+          <label>CVSS minimum<input type="number" min="0" max="10" step="0.1" placeholder="0.0" value={minScore} onChange={e => { setPage(1); setMinScore(e.target.value); }} /></label>
+          <label>CVSS maximum<input type="number" min="0" max="10" step="0.1" placeholder="10.0" value={maxScore} onChange={e => { setPage(1); setMaxScore(e.target.value); }} /></label>
+          <label>CWE<input type="search" maxLength={100} placeholder="e.g. CWE-79" value={cwe} onChange={e => { setPage(1); setCwe(e.target.value); }} /></label>
+          <label>Sort by<select value={sort} onChange={e => { setPage(1); setSort(e.target.value as VulnerabilityFilters['sort']); }}><option value="published">Published date</option><option value="cvss_score">CVSS score</option><option value="priority_score">Priority score</option><option value="cve_id">CVE ID</option></select></label>
+          <label>Order<select value={order} onChange={e => { setPage(1); setOrder(e.target.value as VulnerabilityFilters['order']); }}><option value="desc">Descending</option><option value="asc">Ascending</option></select></label>
+          <button className="button-secondary explorer-reset" onClick={resetFilters}>Reset filters</button>
         </div>
 
         {/* Severity Quick Pills */}
@@ -309,9 +354,7 @@ export default function Explorer() {
                           <button
                             className="button-secondary"
                             onClick={() => {
-                              setQuery('');
-                              setSeverity('');
-                              setPage(1);
+                              resetFilters();
                             }}
                           >
                             Reset filters
