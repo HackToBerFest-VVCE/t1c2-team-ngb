@@ -33,11 +33,7 @@ def create_app(test_config=None):
         app.config.update(test_config)
 
     # ── CORS ──────────────────────────────────────────────────────────
-    default_origins = (
-        "http://localhost:5173,http://127.0.0.1:5173,"
-        "http://localhost:5000,http://127.0.0.1:5000,"
-        "http://localhost:3000,http://127.0.0.1:3000"
-    )
+    default_origins = "*"
     raw_origins = os.getenv("FRONTEND_ORIGINS", default_origins)
     if raw_origins.strip() == "*":
         origins = "*"
@@ -204,5 +200,37 @@ def create_app(test_config=None):
     # Only warm up in the main process, not in the Werkzeug reloader child
         if not app.debug or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
             threading.Thread(target=_warmup, daemon=True).start()
+
+    # ── Vercel / serverless routing middleware ────────────────────────
+    orig_wsgi = app.wsgi_app
+
+    def vercel_wsgi(environ, start_response):
+        qs_str = environ.get("QUERY_STRING", "")
+        if qs_str:
+            from urllib.parse import parse_qs, urlencode
+            qs = parse_qs(qs_str)
+            raw_path = None
+            for key in ("match", "__path"):
+                if key in qs and qs[key]:
+                    raw_path = qs.pop(key)[0].strip()
+                    break
+            if raw_path is not None:
+                environ["QUERY_STRING"] = urlencode(qs, doseq=True)
+                cleaned = raw_path.strip("/")
+                if not cleaned:
+                    target = "/api/health"
+                elif cleaned.startswith("api/"):
+                    target = f"/{cleaned}"
+                else:
+                    target = f"/api/{cleaned}"
+                environ["PATH_INFO"] = target
+                environ["SCRIPT_NAME"] = ""
+        elif environ.get("PATH_INFO") in ("/api/index.py", "/app.py", "/api", "/api/"):
+            environ["PATH_INFO"] = "/api/health"
+            environ["SCRIPT_NAME"] = ""
+
+        return orig_wsgi(environ, start_response)
+
+    app.wsgi_app = vercel_wsgi
 
     return app
