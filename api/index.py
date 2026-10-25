@@ -12,6 +12,21 @@ from backend.app import create_app
 flask_app = create_app()
 
 
+@flask_app.route("/debug")
+@flask_app.route("/api/debug")
+@flask_app.route("/api/index.py")
+def _debug():
+    import flask
+    return {
+        "path": flask.request.path,
+        "environ_PATH_INFO": flask.request.environ.get("PATH_INFO"),
+        "environ_REQUEST_URI": flask.request.environ.get("REQUEST_URI"),
+        "environ_RAW_URI": flask.request.environ.get("RAW_URI"),
+        "headers": dict(flask.request.headers),
+        "url_map": [str(rule) for rule in flask_app.url_map.iter_rules() if "health" in str(rule) or "summary" in str(rule)],
+    }
+
+
 class VercelMiddleware:
     """WSGI middleware to normalize PATH_INFO on Vercel."""
     def __init__(self, wsgi_app):
@@ -19,11 +34,13 @@ class VercelMiddleware:
 
     def __call__(self, environ, start_response):
         path = environ.get("PATH_INFO", "")
-        if path.endswith("/api/index.py") or path == "/api/index.py":
-            req_uri = environ.get("REQUEST_URI", "") or environ.get("RAW_URI", "")
-            if req_uri and not req_uri.startswith("/api/index.py"):
-                clean_path = req_uri.split("?")[0]
-                environ["PATH_INFO"] = clean_path
+        # Check X-Matched-Path or REQUEST_URI
+        matched = environ.get("HTTP_X_MATCHED_PATH") or environ.get("REQUEST_URI", "") or environ.get("RAW_URI", "")
+        if matched and not matched.startswith("/api/index.py"):
+            environ["PATH_INFO"] = matched.split("?")[0]
+        elif path.endswith("/api/index.py") or path == "/api/index.py":
+            # If path was rewritten to /api/index.py, check if query param or path is available
+            pass
         return self.wsgi_app(environ, start_response)
 
 
