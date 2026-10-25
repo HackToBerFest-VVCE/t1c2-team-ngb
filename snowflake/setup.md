@@ -31,10 +31,12 @@ Copy `.env.example` to `.env`, then set `DATA_SOURCE=snowflake` and the followin
 
 - `SNOWFLAKE_ACCOUNT`, `SNOWFLAKE_USER`, `SNOWFLAKE_WAREHOUSE`
 - `SNOWFLAKE_DATABASE`, `SNOWFLAKE_SCHEMA`, `SNOWFLAKE_TABLE`
-- Either `SNOWFLAKE_PRIVATE_KEY_PATH` (preferred) with optional `SNOWFLAKE_PRIVATE_KEY_PASSPHRASE`, or `SNOWFLAKE_PASSWORD`
+- Either `SNOWFLAKE_PRIVATE_KEY_PATH` (preferred locally), `SNOWFLAKE_PRIVATE_KEY_BASE64` (base64-encoded PEM for serverless deployments), or `SNOWFLAKE_PASSWORD`; optionally set `SNOWFLAKE_PRIVATE_KEY_PASSPHRASE` for an encrypted key
 - Optional `SNOWFLAKE_ROLE`; `SNOWFLAKE_MAX_ROWS` defaults to 500,000 and cannot exceed 1,000,000
 
 For key-pair authentication, register the corresponding public key on a dedicated Snowflake service user and store the private PKCS#8 key outside Git. The connector uses Snowflake JWT authentication. Never commit the private key or passphrase, and do not send credentials in chat or screenshots. The password option remains for accounts where it is appropriate.
+
+For Vercel, set the base64-encoded PEM in the **backend project's encrypted environment variable** `SNOWFLAKE_PRIVATE_KEY_BASE64`. Also set the account, user, warehouse, database, schema, table, role, and `DATA_SOURCE=snowflake` values as production-only environment variables. Never use a `VITE_` prefix. Vercel injects these values at runtime; no private-key file needs to be checked into the repository.
 
 Restart Flask, then check `GET /api/health` and `GET /api/data-sources`. The source reports `LIVE` only after it successfully reads the configured table/view. A green result confirms connectivity and schema compatibility; it does not establish Marketplace eligibility. Keep the listing name, provider, license, share/table name, and any competition eligibility evidence in `docs/dataset.md`.
 

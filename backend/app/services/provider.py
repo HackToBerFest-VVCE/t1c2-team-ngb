@@ -139,14 +139,19 @@ class SnowflakeProvider:
         missing = [k for k, v in required.items() if not v]
         password = os.getenv("SNOWFLAKE_PASSWORD", "").strip()
         private_key = os.getenv("SNOWFLAKE_PRIVATE_KEY_PATH", "").strip()
-        if not password and not private_key:
-            missing.append("SNOWFLAKE_PASSWORD or SNOWFLAKE_PRIVATE_KEY_PATH")
+        private_key_base64 = os.getenv("SNOWFLAKE_PRIVATE_KEY_BASE64", "").strip()
+        if not password and not private_key and not private_key_base64:
+            missing.append(
+                "SNOWFLAKE_PASSWORD, SNOWFLAKE_PRIVATE_KEY_PATH, or "
+                "SNOWFLAKE_PRIVATE_KEY_BASE64"
+            )
         if missing:
             raise ProviderError("Snowflake configuration is incomplete")
         if not TABLE_RE.fullmatch(required["SNOWFLAKE_TABLE"]):
             raise ProviderError("Invalid Snowflake table identifier")
         required["SNOWFLAKE_PASSWORD"] = password
         required["SNOWFLAKE_PRIVATE_KEY_PATH"] = private_key
+        required["SNOWFLAKE_PRIVATE_KEY_BASE64"] = private_key_base64
         return required  # type: ignore[return-value]
 
     def _connection(self):
@@ -164,7 +169,32 @@ class SnowflakeProvider:
                 login_timeout=10,
                 network_timeout=20,
             )
-            if c["SNOWFLAKE_PRIVATE_KEY_PATH"]:
+            if c["SNOWFLAKE_PRIVATE_KEY_BASE64"]:
+                import base64
+                from cryptography.hazmat.primitives import serialization
+                from cryptography.hazmat.primitives.serialization import (
+                    Encoding,
+                    NoEncryption,
+                    PrivateFormat,
+                )
+
+                pem_data = base64.b64decode(
+                    c["SNOWFLAKE_PRIVATE_KEY_BASE64"], validate=True
+                )
+                passphrase = os.getenv("SNOWFLAKE_PRIVATE_KEY_PASSPHRASE", "")
+                private_key = serialization.load_pem_private_key(
+                    pem_data,
+                    password=passphrase.encode("utf-8") if passphrase else None,
+                )
+                connection.update(
+                    authenticator="SNOWFLAKE_JWT",
+                    private_key=private_key.private_bytes(
+                        Encoding.DER,
+                        PrivateFormat.PKCS8,
+                        NoEncryption(),
+                    ),
+                )
+            elif c["SNOWFLAKE_PRIVATE_KEY_PATH"]:
                 connection.update(
                     authenticator="SNOWFLAKE_JWT",
                     private_key_file=c["SNOWFLAKE_PRIVATE_KEY_PATH"],
