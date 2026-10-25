@@ -14,4 +14,5 @@ frontend/audit.json
 data/external/
 data/vulnerabilities.full.json
 data/vulnerabilities.full.json.gz
+data/vulnerabilities.full.parquet
 .git/
