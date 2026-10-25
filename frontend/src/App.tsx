@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react';
 import { Shell } from './components/Shell';
 import Overview from './pages/Overview';
 import Explorer from './pages/Explorer';
+import ProjectStudio from './pages/Projects';
 import {
   Trends,
   Risk,
@@ -28,6 +29,7 @@ const PAGES: Record<string, React.FC<any>> = {
   'CVSS Analysis': Risk,
   'ML Insights': ML,
   'Data Explorer': DataExplorer,
+  'Project Studio': ProjectStudio,
   'Reports': Reports,
   'Settings': Settings,
 };

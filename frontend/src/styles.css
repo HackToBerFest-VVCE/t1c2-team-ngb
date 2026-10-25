@@ -2145,6 +2145,35 @@ select option:hover {
   box-shadow: 0 0 0 3px rgba(107, 140, 255, 0.15);
 }
 
+.projects-page .field-label {
+  display: block;
+  margin: 14px 0 7px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.projects-page .search-input {
+  padding: 10px 12px;
+  margin-bottom: 4px;
+}
+
+.projects-page textarea.search-input {
+  min-height: 110px;
+  resize: vertical;
+  line-height: 1.6;
+}
+
+.projects-page select.button-secondary {
+  width: 100%;
+}
+
+.projects-page .button-primary {
+  margin-top: 14px;
+}
+
 .clear-search {
   position: absolute;
   right: 64px;

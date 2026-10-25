@@ -15,6 +15,7 @@ import {
   CircleAlert,
   Database,
   FileText,
+  FolderKanban,
   Info,
   LayoutDashboard,
   Search,
@@ -36,6 +37,7 @@ const NAV_ITEMS = [
   ['CVSS Analysis', ShieldCheck],
   ['ML Insights', Sparkles],
   ['Data Explorer', Database],
+  ['Project Studio', FolderKanban],
   ['Reports', FileText],
   ['Settings', Settings2],
 ] as const;
@@ -126,7 +128,7 @@ export function Shell({ page, setPage, source, children }: ShellProps) {
           </div>
           <div>
             <b>ThreatLens</b>
-            <small>CYBER INTELLIGENCE</small>
+            <small>TEAM NOVA · CYBER INTELLIGENCE</small>
           </div>
         </div>
 
@@ -200,7 +202,7 @@ export function Shell({ page, setPage, source, children }: ShellProps) {
         </div>
 
         <footer>
-          ThreatLens AI
+          ThreatLens AI · Team Nova
           <span>•</span>
           Evidence-backed vulnerability intelligence
           <span className="footer-right">

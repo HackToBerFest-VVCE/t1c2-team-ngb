@@ -227,6 +227,52 @@ class TestDataSources:
         assert "demo" in data["available"]
 
 
+class TestProjectStudio:
+    def test_dataset_and_template_catalog(self, client):
+        response = client.get("/api/project-catalog")
+        assert response.status_code == 200
+        data = response.get_json()
+        assert {item["id"] for item in data["datasets"]} >= {
+            "nvd-cve", "hf-cvefixes", "hf-cybersecurity-attacks", "snowflake-marketplace"
+        }
+        assert {item["id"] for item in data["templates"]} >= {
+            "vulnerability-prioritization", "code-flaw-classifier", "intrusion-detection"
+        }
+
+    def test_project_scope_validates_known_template_and_dataset(self, client):
+        response = client.post("/api/project-scopes", json={
+            "template_id": "vulnerability-prioritization",
+            "title": "NVD triage pilot",
+            "goal": "Build an evidence-grounded workflow for analysts to triage source-scored public CVEs.",
+            "success_metrics": ["CVSS coverage", "reviewed remediation backlog"],
+            "dataset_ids": ["nvd-cve"],
+        })
+        assert response.status_code == 201
+        assert response.get_json()["persistence"] == "browser workspace"
+
+    def test_project_scope_rejects_unknown_dataset(self, client):
+        response = client.post("/api/project-scopes", json={
+            "template_id": "vulnerability-prioritization", "title": "NVD pilot",
+            "goal": "Build a sufficiently long project goal for validation.",
+            "success_metrics": ["coverage"], "dataset_ids": ["not-a-dataset"],
+        })
+        assert response.status_code == 400
+
+    def test_contributions_is_explicitly_unavailable_without_audit_store(self, client):
+        response = client.get("/api/contributions")
+        assert response.status_code == 200
+        assert response.get_json()["available"] is False
+        assert response.get_json()["members"] == []
+
+    def test_contribution_write_requires_server_side_token(self, client):
+        response = client.post("/api/contributions", json={
+            "event_type": "CONTRIBUTION", "project_id": "threatlens",
+            "actor": "analyst", "contribution_type": "documentation",
+            "artifact_url": "https://github.com/yogesh-37911/Threat-Lens-Ai/pull/1",
+        })
+        assert response.status_code == 403
+
+
 class TestVulnerabilities:
     def test_default_pagination(self, client):
         r = client.get("/api/vulnerabilities")
@@ -325,6 +371,14 @@ class TestAIEndpoints:
         assert response.get_json()["configured"] is True
         assert "test-token-that-must-not-leak" not in response.get_data(as_text=True)
 
+    def test_cortex_is_an_optional_provider(self, client, monkeypatch):
+        monkeypatch.setenv("DATA_SOURCE", "demo")
+        response = client.get("/api/ai/status")
+        assert response.status_code == 200
+        cortex = next(item for item in response.get_json()["providers"] if item["provider"] == "cortex")
+        assert cortex["configured"] is False
+        assert cortex["model"] == "llama3.1-8b"
+
     def test_insights_requires_key(self, client, monkeypatch):
         monkeypatch.setenv("AI_PROVIDER", "nvidia")
         monkeypatch.delenv("NVIDIA_API_KEY", raising=False)
@@ -339,6 +393,15 @@ class TestAIEndpoints:
     def test_insights_validates_provider(self, client):
         response = client.post("/api/ai/insights", json={"days": 90, "provider": "unknown"})
         assert response.status_code == 400
+
+    def test_cortex_falls_back_to_local_summary_when_not_configured(self, client, monkeypatch):
+        monkeypatch.setenv("DATA_SOURCE", "demo")
+        response = client.post("/api/ai/insights", json={"days": 90, "provider": "cortex"})
+        assert response.status_code == 200
+        body = response.get_json()
+        assert body["provider"] == "local"
+        assert body["fallback_from"] == "cortex"
+        assert body["fallback_reason"]
 
 
 class TestRiskAnalysis:

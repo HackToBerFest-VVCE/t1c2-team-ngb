@@ -212,6 +212,31 @@ class SnowflakeProvider:
                 "Could not connect to configured Snowflake source"
             ) from exc
 
+    def cortex_complete(self, prompt: str, model: str) -> str:
+        """Run a single bounded Cortex completion in the configured account."""
+        if len(prompt) > 24000:
+            raise ProviderError("Cortex prompt exceeds the configured size limit")
+        if model not in {"llama3.1-8b", "llama3.3-70b", "llama3.1-70b", "mistral-large2"}:
+            raise ProviderError("Unsupported Cortex model")
+        conn = self._connection()
+        try:
+            cur = conn.cursor()
+            try:
+                cur.execute("SELECT SNOWFLAKE.CORTEX.COMPLETE(%s, %s)", (model, prompt))
+                row = cur.fetchone()
+                if not row or not isinstance(row[0], str) or not row[0].strip():
+                    raise ProviderError("Cortex returned an empty completion")
+                return row[0].strip()[:16000]
+            finally:
+                cur.close()
+        except ProviderError:
+            raise
+        except Exception as exc:
+            # Do not forward SQL/provider response bodies; they can contain account details.
+            raise ProviderError("Snowflake Cortex is currently unavailable") from exc
+        finally:
+            conn.close()
+
     def records(self) -> pd.DataFrame:
         global _SNOWFLAKE_LAST_REFRESH
         table = self._config()["SNOWFLAKE_TABLE"]

@@ -13,6 +13,16 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    // Recharts is 566 kB minified but ~161 kB gzip; raise Vite's raw-size
+    // warning threshold to avoid flagging this compressed production chunk.
+    chunkSizeWarningLimit: 600,
+    rollupOptions: {
+      output: {
+        manualChunks: { charts: ['recharts'] },
+      },
+    },
+  },
   test: {
     environment: 'jsdom',
     setupFiles: './src/test-setup.ts',

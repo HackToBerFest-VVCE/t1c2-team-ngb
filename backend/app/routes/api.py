@@ -11,6 +11,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlsplit
 
 import pandas as pd
 from flask import Blueprint, Response, jsonify, request
@@ -19,6 +20,8 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from ..analytics.core import add_priority, metrics, ml_results, safe_records
 from ..services.ai import AIServiceError, MODELS, analyze, analyze_locally, configuration, provider_options, select_cve_examples
 from ..services.provider import ProviderError, get_provider, get_records, mode
+from ..services.projects import project_catalog
+from ..services.audit import AuditUnavailable, append_event, audit_configured, list_events, summarize_events
 
 api = Blueprint("api", __name__)
 log = logging.getLogger("threatlens.api")
@@ -101,6 +104,133 @@ def data_sources():
         })
     except ProviderError as exc:
         return _error("data_source_unavailable", str(exc), 503)
+
+
+# ── Dataset discovery and project scoping ─────────────────────────────
+
+@api.get("/project-catalog")
+def get_project_catalog():
+    """Return curated public data sources and reusable project templates."""
+    return jsonify(project_catalog())
+
+
+@api.get("/datasets")
+def datasets():
+    """Compatibility endpoint for dataset-only discovery clients."""
+    return jsonify({"items": project_catalog()["datasets"]})
+
+
+class ProjectScopeRequest(BaseModel):
+    template_id: str = Field(min_length=3, max_length=80)
+    title: str = Field(min_length=3, max_length=120)
+    goal: str = Field(min_length=20, max_length=1200)
+    success_metrics: list[str] = Field(min_length=1, max_length=8)
+    dataset_ids: list[str] = Field(min_length=1, max_length=8)
+
+
+@api.post("/project-scopes")
+def validate_project_scope():
+    """Validate and return a project scope for the client to save in its workspace."""
+    try:
+        body = ProjectScopeRequest.model_validate(request.get_json(silent=True) or {})
+    except ValidationError as exc:
+        return _error("invalid_request", exc.errors()[0]["msg"], 400)
+    catalog = project_catalog()
+    template = next((t for t in catalog["templates"] if t["id"] == body.template_id), None)
+    known_datasets = {d["id"] for d in catalog["datasets"]}
+    if not template:
+        return _error("invalid_template", "Select a project template from the catalog.", 400)
+    if any(item not in known_datasets for item in body.dataset_ids):
+        return _error("invalid_dataset", "Select datasets from the discovery catalog.", 400)
+    return jsonify({
+        "status": "validated",
+        "persistence": "browser workspace",
+        "scope": body.model_dump(),
+        "template": template,
+        "validated_at": datetime.now(timezone.utc).isoformat(),
+        "notice": "The scope is stored in this browser only; no Snowflake compute or project resources were allocated.",
+    }), 201
+
+
+# ── Contribution, peer-review, and evaluation audit ───────────────────
+
+class AuditEventRequest(BaseModel):
+    event_type: Literal["CONTRIBUTION", "PEER_REVIEW", "EVALUATION"]
+    project_id: str = Field(min_length=1, max_length=80)
+    actor: str = Field(min_length=1, max_length=120)
+    event_date: str | None = Field(default=None, max_length=40)
+    contribution_type: str | None = Field(default=None, max_length=60)
+    reviewee: str | None = Field(default=None, max_length=120)
+    review_rating: int | None = Field(default=None, ge=1, le=5)
+    artifact_url: str | None = Field(default=None, max_length=500)
+    metric_name: str | None = Field(default=None, max_length=80)
+    metric_value: float | None = Field(default=None, ge=0, le=1)
+    details: str | None = Field(default=None, max_length=2000)
+
+
+@api.get("/contributions")
+def contributions():
+    """Return append-only team activity, peer review, and held-out evaluations."""
+    try:
+        if not audit_configured():
+            training = training_report().get_json()
+            return jsonify({
+                "available": False,
+                "reason": "Configure the dedicated Snowflake audit table to publish team events. No contribution scores are fabricated.",
+                "events": [], "members": [], "peer_reviews": [],
+                "evaluations": [], "model_benchmarks": training,
+                "scoring_policy": "Fixed event weights: code 5, documentation 2, dataset 4, model 6, peer review 3, other 1. Totals are auditable activity indicators, not identity verification or objective engineering-quality scores.",
+            })
+        events = list_events(200)
+        training = training_report().get_json()
+        return jsonify({"available": True, "events": events, "model_benchmarks": training, **summarize_events(events)})
+    except AuditUnavailable:
+        return jsonify({"available": False, "reason": "Audit table is unavailable; apply snowflake/contributions.sql and grant the audit role access.", "events": [], "members": [], "peer_reviews": [], "evaluations": []})
+
+
+@api.post("/contributions")
+def add_contribution_event():
+    """Append a contribution/review/evaluation event using a server-side token."""
+    try:
+        body = AuditEventRequest.model_validate(request.get_json(silent=True) or {})
+    except ValidationError as exc:
+        return _error("invalid_request", exc.errors()[0]["msg"], 400)
+    event = body.model_dump()
+    requirements = {
+        "CONTRIBUTION": ("contribution_type", "artifact_url"),
+        "PEER_REVIEW": ("reviewee", "review_rating"),
+        "EVALUATION": ("metric_name", "metric_value"),
+    }[body.event_type]
+    if any(event.get(key) is None for key in requirements):
+        return _error("invalid_request", f"{body.event_type} requires {', '.join(requirements)}.", 400)
+    if body.event_type == "CONTRIBUTION":
+        weights = {"code": 5.0, "documentation": 2.0, "dataset": 4.0, "model": 6.0, "peer_review": 3.0, "other": 1.0}
+        contribution_type = str(body.contribution_type or "").strip().lower()
+        if contribution_type not in weights:
+            return _error("invalid_request", "contribution_type must be code, documentation, dataset, model, peer_review, or other.", 400)
+        if not body.artifact_url:
+            return _error("invalid_request", "Contribution events require an https artifact_url.", 400)
+        event["contribution_type"] = contribution_type
+        event["points"] = weights[contribution_type]
+    if body.event_type == "PEER_REVIEW" and body.actor.strip().casefold() == str(body.reviewee).strip().casefold():
+        return _error("invalid_request", "A peer review must identify a different reviewee.", 400)
+    if body.event_date:
+        try:
+            datetime.strptime(body.event_date, "%Y-%m-%d")
+        except ValueError:
+            return _error("invalid_request", "event_date must use YYYY-MM-DD.", 400)
+    if body.artifact_url:
+        parsed_url = urlsplit(body.artifact_url)
+        if parsed_url.scheme != "https" or not parsed_url.netloc or parsed_url.username or parsed_url.password:
+            return _error("invalid_request", "artifact_url must be a valid https URL without embedded credentials.", 400)
+    token = request.headers.get("X-ThreatLens-Audit-Token")
+    try:
+        event_id = append_event(event, token)
+    except PermissionError:
+        return _error("forbidden", "A valid server-side audit write token is required.", 403)
+    except AuditUnavailable:
+        return _error("audit_unavailable", "Configure the dedicated audit table and Snowflake write role first.", 503)
+    return jsonify({"status": "recorded", "event_id": event_id}), 201
 
 
 # ── Metrics ───────────────────────────────────────────────────────────
@@ -423,7 +553,7 @@ def ai_insights():
     selected_provider = body.get("provider")
     if selected_provider is not None:
         if not isinstance(selected_provider, str) or selected_provider.strip().lower() not in MODELS:
-            return _error("invalid_parameter", "provider must be nvidia, kimi, or deepseek.", 400)
+            return _error("invalid_parameter", "provider must be nvidia, kimi, deepseek, or cortex.", 400)
         selected_provider = selected_provider.strip().lower()
     try:
         frame = _records().dropna(subset=["published"])

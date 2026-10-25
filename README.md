@@ -1,8 +1,8 @@
-# ThreatLens AI
+# ThreatLens AI · Team Nova
 
 **From Open Cyber Data to Explainable Intelligence**
 
-ThreatLens AI is an evidence-linked vulnerability analysis dashboard built with React, Flask, pandas, scikit-learn, optional generative analysis through NVIDIA NIM, and a Snowflake data provider. Its local development environment is connected to a Snowflake table populated from official NIST NVD CVE feeds; this is NVD-origin data stored in Snowflake, not a Marketplace listing. See [Snowflake setup and current connection](snowflake/setup.md).
+ThreatLens AI is Team Nova's flagship open-source cybersecurity implementation: an evidence-linked vulnerability analysis platform built with React, Flask, pandas, scikit-learn, optional NVIDIA NIM/Snowflake Cortex and Snowpark, and a native Streamlit entry point. Its local development environment is connected to a Snowflake table populated from official NIST NVD CVE feeds; this is NVD-origin data stored in Snowflake, not a Marketplace listing. See [Snowflake setup and current connection](snowflake/setup.md).
 
 ## Current implementation status
 
@@ -16,6 +16,11 @@ ThreatLens AI is an evidence-linked vulnerability analysis dashboard built with 
 - Snowflake connector/provider with password or key-pair authentication, plus bounded read-only access to a configured table or compatibility view.
 - **Live Snowflake connection verified:** `THREATLENS_DB.THREATLENS.VULNERABILITIES`, populated with NVD annual feeds for 2024–2026. The service role is read-only and uses a capped X-Small warehouse. This is not a Snowflake Marketplace dataset; confirm the hackathon's source eligibility separately.
 - CoCo was unavailable; actual use is not claimed. See `docs/coco-workflow.md`.
+- Project Studio provides a dataset discovery catalog, vulnerability/code-flaw/intrusion-detection templates, goal/metric scope validation, and browser-local project briefs.
+- Optional Snowpark transformations run canonical CVE normalization and a separately labeled triage heuristic in Snowflake compute; see [`snowflake/snowpark_transforms.py`](snowflake/snowpark_transforms.py).
+- Optional Snowflake Cortex `COMPLETE` adds bounded in-database LLM analysis. Cortex failures return deterministic local analysis. The default is `llama3.1-8b`; model support varies by account, region, and lifecycle.
+- Audit & Traceability reads append-only contribution, peer-review, and evaluation events from Snowflake when a separate audit identity/table is configured. No scores are fabricated when the ledger is unavailable.
+- `streamlit_app.py` is a native Snowflake Streamlit app; install [`requirements-streamlit.txt`](requirements-streamlit.txt) for local use.
 
 ## Architecture
 
@@ -82,13 +87,30 @@ The connected Snowflake table contains NVD-origin CVE records imported from the 
 
 The provider reads a fixed set of canonical CVE columns and bounds results using `SNOWFLAKE_MAX_ROWS` (500,000 default, 1,000,000 maximum). Credentials remain backend-side; key-pair authentication is supported. This account's dedicated service role has read-only table access. Two genuine CoCo requests were submitted but both failed before analysis with a Snowflake Cortex Code service-entitlement error; no CoCo output is claimed. See the exact prompts and request ID in `docs/coco-workflow.md`.
 
+### Cortex and Snowpark
+
+Snowflake Cortex is an optional choice in **ML Insights → AI Pattern Analysis** when `DATA_SOURCE=snowflake` and the configured warehouse/role can call Cortex. It sends a bounded sample of public CVE fields to `SNOWFLAKE.CORTEX.COMPLETE`; on service, entitlement, model, or account errors, the API returns deterministic local analysis and labels the fallback. The default model is `llama3.1-8b`; availability varies by region and account. The blueprint's `mistral-large2` and `llama3.1-70b` examples are now legacy for new integrations, so configure only models available to the account. See [Snowflake model availability](https://docs.snowflake.com/en/user-guide/snowflake-cortex/model-availability).
+
+Install the optional dependency set for Snowpark transforms and local Streamlit:
+
+```powershell
+pip install -r requirements-streamlit.txt
+streamlit run streamlit_app.py
+```
+
+In a Snowflake-hosted Streamlit app the code uses the active session. Locally it reads the existing `SNOWFLAKE_*` variables from the backend environment; it never asks the browser for a password. `snowflake/snowpark_transforms.py` exposes `transform_vulnerabilities(session, table_name)` for a Snowpark job/worksheet. Its `TRIAGE_SCORE` is a simple separate heuristic and is not official CVSS. Registering its optional temporary UDF requires Snowflake function-creation privileges.
+
+### Contribution and evaluation audit
+
+Run [`snowflake/contributions.sql`](snowflake/contributions.sql) in the selected database/schema. Provision a **separate** audit service identity and small warehouse with `SELECT, INSERT` on the event table; keep the main CVE reader role read-only. Configure the `SNOWFLAKE_AUDIT_*` variables from `.env.example` and set `THREATLENS_AUDIT_WRITE_TOKEN` only in the backend secret store. `GET /api/contributions` reads the event ledger; `POST /api/contributions` requires `X-ThreatLens-Audit-Token` and appends a validated contribution, peer-review, or evaluation event. The React app only reads this endpoint. Audit history and scores remain unavailable until the table and dedicated identity are set up.
+
 ## Optional generative analysis
 
 Put each provider's own API key in its matching backend-only variable (`NVIDIA_API_KEY`, `KIMI_API_KEY`, or `DEEPSEEK_API_KEY`) in `.env`, then restart Flask to enable generated AI commentary. Without a key, **Analyze locally** still produces a deterministic, evidence-grounded summary from the active dataset and ML outputs; it makes no third-party AI request. With a key configured, the ML Insights page can select Nemotron, Kimi, or DeepSeek, and sends bounded summary metrics and CVE examples only after **Analyze patterns** is clicked. Do not put keys in frontend variables, source control, screenshots, or logs. See [docs/methodology.md](docs/methodology.md) for scope and limitations.
 
 ## API
 
-`GET /api/health`, `/api/data-sources`, `/api/metrics`, `/api/summary`, `/api/vulnerabilities?q=&severity=&from=&to=&min_score=&max_score=&cwe=&sort=&order=&page=&per_page=`, `/api/vulnerabilities/<cve_id>`, `/api/trends?days=`, `/api/ai/status`, `POST /api/ai/insights` (`{"days":90}`), `/api/risk-analysis`, `/api/ml/clusters`, `/api/ml/anomalies`, `/api/ml/training`, `/api/data-quality`, `/api/reports/summary`, and `POST /api/reports/export` (accepts the same filters as the Explorer plus `format: csv|json`). Errors use `{ "error": {"code":"...","message":"..."} }`. CORS is restricted to `FRONTEND_ORIGINS`; request inputs are validated and unrestricted SQL is unavailable.
+`GET /api/health`, `/api/data-sources`, `/api/project-catalog`, `/api/datasets`, `POST /api/project-scopes`, `GET/POST /api/contributions`, `/api/metrics`, `/api/summary`, `/api/vulnerabilities?q=&severity=&from=&to=&min_score=&max_score=&cwe=&sort=&order=&page=&per_page=`, `/api/vulnerabilities/<cve_id>`, `/api/trends?days=`, `/api/ai/status`, `POST /api/ai/insights` (`{"days":90,"provider":"cortex"}`), `/api/risk-analysis`, `/api/ml/clusters`, `/api/ml/anomalies`, `/api/ml/training`, `/api/data-quality`, `/api/reports/summary`, and `POST /api/reports/export` (accepts the same filters as the Explorer plus `format: csv|json`). Project scopes are saved in browser storage; audit events are persisted only in the optional Snowflake audit table. Errors use `{ "error": {"code":"...","message":"..."} }`. CORS is restricted to `FRONTEND_ORIGINS`; request inputs are validated and unrestricted SQL is unavailable.
 
 ## Method and limitations
 

@@ -119,6 +119,8 @@ export interface AIInsights {
   generated_at: string;
   cited_cves: string[];
   notice: string;
+  fallback_from?: string;
+  fallback_reason?: string;
 }
 
 export interface RiskMethod {

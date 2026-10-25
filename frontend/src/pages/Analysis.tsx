@@ -750,7 +750,8 @@ function AIInsightPanel() {
             { provider: 'nvidia', model: 'Nemotron', configured: false },
             { provider: 'kimi', model: 'Kimi', configured: false },
             { provider: 'deepseek', model: 'DeepSeek', configured: false },
-          ]).map(option => <option key={option.provider} value={option.provider}>{option.provider.toUpperCase()} · {option.model}{option.configured ? '' : ' (key missing)'}</option>)}
+            { provider: 'cortex', model: 'llama3.1-8b', configured: false },
+          ]).map(option => <option key={option.provider} value={option.provider}>{option.provider.toUpperCase()} · {option.model}{option.configured ? '' : option.provider === 'cortex' ? ' (Snowflake connection required)' : ' (key missing)'}</option>)}
         </select>
         <button className="button-primary" onClick={runAnalysis} disabled={loading || !status}>
           <Sparkles size={15} /> {loading ? 'Analyzing…' : selectedModel?.configured ? 'Analyze patterns' : 'Analyze locally'}
@@ -761,16 +762,20 @@ function AIInsightPanel() {
       </div>
       <p className="limitation-footer">
         {selectedModel?.configured
-          ? 'This action sends full-window summary statistics, up to 80 Critical/High CVEs (severity or CVSS ≥ 7), up to 20 comparison CVEs, and ML outlier IDs to the selected provider. The API key stays on the backend.'
+          ? provider === 'cortex'
+            ? 'This action sends a bounded summary and selected public CVE records to Snowflake Cortex in your configured account. Snowflake usage and model availability rules apply.'
+            : 'This action sends full-window summary statistics, up to 80 Critical/High CVEs (severity or CVSS ≥ 7), up to 20 comparison CVEs, and ML outlier IDs to the selected provider. The API key stays on the backend.'
           : 'Local mode analyzes full-window summary statistics, prioritized Critical/High CVEs, and ML outliers on the server. No third-party AI request is made.'}
       </p>
       {!selectedModel?.configured && (
         <div className="notice">
           <Info size={16} />
           <div>
-            <b>{provider === 'nvidia' ? 'NVIDIA NIM key required' : `${provider.toUpperCase()} native key required`}</b>
+            <b>{provider === 'cortex' ? 'Snowflake connection required' : provider === 'nvidia' ? 'NVIDIA NIM key required' : `${provider.toUpperCase()} native key required`}</b>
             <span>
-              {provider === 'nvidia'
+              {provider === 'cortex'
+                ? 'Configure the backend with DATA_SOURCE=snowflake and a working Snowflake identity. The Analyze action falls back to deterministic local analysis when Cortex is unavailable.'
+                : provider === 'nvidia'
                 ? 'Configure NVIDIA_API_KEY from build.nvidia.com (starts with nvapi-).'
                 : `${provider.toUpperCase()} requires a native API key from ${provider === 'deepseek' ? 'platform.deepseek.com' : 'platform.moonshot.cn'} (starts with sk-). To run analysis using your NVIDIA NIM token, select NVIDIA above.`}
             </span>
@@ -785,6 +790,7 @@ function AIInsightPanel() {
             <div><b>{result.source.dataset} · {result.source.mode} · {result.record_count.toLocaleString()} records</b><span>{result.window_days}-day window · {result.model} · generated {new Date(result.generated_at).toLocaleString()}</span></div>
           </div>
           {result.cve_selection && <p className="limitation-footer" style={{ marginTop: 0 }}>AI input: {result.cve_selection.included_high_critical} of {result.cve_selection.window_high_critical} Critical/High CVEs in the window, plus {result.cve_selection.included_context} comparison CVEs. Summary statistics cover all {result.cve_selection.window_records.toLocaleString()} distinct CVEs in the window.</p>}
+          {result.fallback_reason && <div className="notice"><Info size={16} /><div><b>Local fallback used</b><span>{result.fallback_reason}</span></div></div>}
           <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>{result.analysis}</div>
           <p className="limitation-footer" style={{ marginTop: 16 }}>{result.notice}</p>
           {result.cited_cves.length > 0 && <div className="term-cloud">{result.cited_cves.map(id => <a key={id} className="text-action" href={`https://nvd.nist.gov/vuln/detail/${encodeURIComponent(id)}`} target="_blank" rel="noreferrer">{id} <ExternalLink size={12} /></a>)}</div>}

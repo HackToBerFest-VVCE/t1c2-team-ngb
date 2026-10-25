@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1100" viewBox="0 0 1600 1100" role="img" aria-labelledby="title desc">
-  <title id="title">ThreatLens AI — evidence-linked vulnerability intelligence</title>
-  <desc id="desc">Halloween-themed system architecture diagram for the existing ThreatLens AI project. Shows data inputs, source configuration, normalization and analytics, optional AI commentary, React dashboard, Flask API, optional Snowflake provider, and reporting.</desc>
+  <title id="title">ThreatLens AI · Team Nova cybersecurity platform</title>
+  <desc id="desc">Halloween-themed architecture for Team Nova's ThreatLens AI. Shows dataset and template discovery, project scoping, optional Snowpark preparation and Cortex analysis, source-backed vulnerability analytics, append-only contribution and peer-review audit events, React and Streamlit interfaces, and deployment.</desc>
   <defs>
     <linearGradient id="bg" x2="0" y2="1"><stop stop-color="#171522"/><stop offset="1" stop-color="#0d0c13"/></linearGradient>
     <linearGradient id="orange" x2="1" y2="1"><stop stop-color="#ff9a3d"/><stop offset="1" stop-color="#e85b21"/></linearGradient>
@@ -18,7 +18,7 @@
   <!-- Halloween accents -->
   <g transform="translate(86 56)" fill="#f28d3a"><path d="M0 15c8-12 18-12 26 0 8-12 18-12 26 0-2 15-12 23-26 28C12 38 2 30 0 15z"/><path d="m16 21 7 3-7 4zm18 0-7 3 7 4z" fill="#171522"/><path d="m25 29 5 6 5-6z" fill="#171522"/></g>
   <g transform="translate(1460 55)" fill="#9b7aff"><path d="M0 27Q15 2 29 23Q43 2 58 27Q45 25 36 43L29 30 22 43Q13 25 0 27z"/><circle cx="29" cy="25" r="4" fill="#171522"/></g>
-  <text x="800" y="57" text-anchor="middle" class="tag" fill="#ffab58">SYSTEM ARCHITECTURE  •  HALLOWEEN EDITION</text>
+  <text x="800" y="57" text-anchor="middle" class="tag" fill="#ffab58">TEAM NOVA FLAGSHIP  •  SYSTEM ARCHITECTURE  •  HALLOWEEN EDITION</text>
   <text x="800" y="111" text-anchor="middle" font-size="43" font-weight="850">THREATLENS <tspan fill="#ff913d">AI</tspan></text>
   <text x="800" y="143" text-anchor="middle" class="body muted">From public vulnerability records to explainable, evidence-linked insights</text>
   <rect x="546" y="160" width="508" height="31" rx="15" fill="#35251f" stroke="#a95c2d"/>
@@ -29,11 +29,11 @@
     <rect class="card" x="38" y="219" width="287" height="333" rx="18"/><rect class="card" x="349" y="219" width="287" height="333" rx="18"/><rect class="card" x="660" y="219" width="287" height="333" rx="18"/><rect class="card" x="971" y="219" width="287" height="333" rx="18"/><rect class="card" x="1282" y="219" width="280" height="333" rx="18"/>
   </g>
   <!-- stage headings -->
-  <g><circle cx="69" cy="253" r="19" fill="url(#orange)"/><text x="69" y="260" text-anchor="middle" font-size="18" font-weight="800">1</text><text x="98" y="250" class="head">Data discovery</text><text x="98" y="273" class="tiny muted">Public sources &amp; imports</text>
-  <circle cx="380" cy="253" r="19" fill="url(#violet)"/><text x="380" y="260" text-anchor="middle" font-size="18" font-weight="800">2</text><text x="409" y="250" class="head">Source selection</text><text x="409" y="273" class="tiny muted">Backend configuration</text>
-  <circle cx="691" cy="253" r="19" fill="url(#orange)"/><text x="691" y="260" text-anchor="middle" font-size="18" font-weight="800">3</text><text x="720" y="250" class="head">Prepare &amp; analyze</text><text x="720" y="273" class="tiny muted">Normalization and analytics</text>
-  <circle cx="1002" cy="253" r="19" fill="url(#violet)"/><text x="1002" y="260" text-anchor="middle" font-size="18" font-weight="800">4</text><text x="1031" y="250" class="head">Explain &amp; explore</text><text x="1031" y="273" class="tiny muted">Evidence-linked results</text>
-  <circle cx="1313" cy="253" r="19" fill="url(#orange)"/><text x="1313" y="260" text-anchor="middle" font-size="18" font-weight="800">5</text><text x="1342" y="250" class="head">Use &amp; export</text><text x="1342" y="273" class="tiny muted">Dashboard and reports</text></g>
+  <g><circle cx="69" cy="253" r="19" fill="url(#orange)"/><text x="69" y="260" text-anchor="middle" font-size="18" font-weight="800">1</text><text x="98" y="250" class="head">Data discovery</text><text x="98" y="273" class="tiny muted">NVD • Hugging Face • listings</text>
+  <circle cx="380" cy="253" r="19" fill="url(#violet)"/><text x="380" y="260" text-anchor="middle" font-size="18" font-weight="800">2</text><text x="409" y="250" class="head">Project scoping</text><text x="409" y="273" class="tiny muted">Templates • goals • metrics</text>
+  <circle cx="691" cy="253" r="19" fill="url(#orange)"/><text x="691" y="260" text-anchor="middle" font-size="18" font-weight="800">3</text><text x="720" y="250" class="head">Prepare &amp; train</text><text x="720" y="273" class="tiny muted">Snowpark • task-specific ML</text>
+  <circle cx="1002" cy="253" r="19" fill="url(#violet)"/><text x="1002" y="260" text-anchor="middle" font-size="18" font-weight="800">4</text><text x="1031" y="250" class="head">Evaluate &amp; review</text><text x="1031" y="273" class="tiny muted">Held-out metrics • audit ledger</text>
+  <circle cx="1313" cy="253" r="19" fill="url(#orange)"/><text x="1313" y="260" text-anchor="middle" font-size="18" font-weight="800">5</text><text x="1342" y="250" class="head">Deploy &amp; share</text><text x="1342" y="273" class="tiny muted">React • Flask • Streamlit</text></g>
   <!-- stage 1 -->
   <rect class="inner" x="56" y="294" width="251" height="86" rx="12"/><text x="75" y="321" class="body" font-weight="700">NVD CVE 2.0</text><text x="75" y="345" class="small muted">Bundled snapshot by default;</text><text x="75" y="366" class="small muted">annual feed import available.</text>
   <rect class="inner" x="56" y="393" width="251" height="63" rx="12"/><text x="75" y="419" class="body" font-weight="700">Snowflake table / view</text><text x="75" y="442" class="small muted">Optional, canonical CVE columns.</text>
@@ -51,7 +51,7 @@
   <rect class="inner" x="989" y="370" width="251" height="63" rx="12"/><text x="1008" y="397" class="body" font-weight="700">Transparent risk signals</text><text x="1008" y="420" class="small muted">CVSS is source data; priority is heuristic.</text>
   <rect class="inner" x="989" y="446" width="251" height="86" rx="12"/><text x="1008" y="473" class="body" font-weight="700">Optional AI commentary</text><text x="1008" y="497" class="small muted">Local summary works without a key;</text><text x="1008" y="518" class="small muted">external provider runs on request only.</text>
   <!-- stage 5 -->
-  <rect class="inner" x="1300" y="294" width="244" height="63" rx="12"/><text x="1319" y="321" class="body" font-weight="700">React dashboard</text><text x="1319" y="344" class="small muted">Overview, explorer, trends, ML.</text>
+  <rect class="inner" x="1300" y="294" width="244" height="63" rx="12"/><text x="1319" y="321" class="body" font-weight="700">React + Streamlit apps</text><text x="1319" y="344" class="small muted">Project Studio, explorer, audit.</text>
   <rect class="inner" x="1300" y="370" width="244" height="63" rx="12"/><text x="1319" y="397" class="body" font-weight="700">Flask REST API</text><text x="1319" y="420" class="small muted">Validated, paginated JSON endpoints.</text>
   <rect class="inner" x="1300" y="446" width="244" height="86" rx="12"/><text x="1319" y="473" class="body" font-weight="700">Share findings</text><text x="1319" y="497" class="small muted">CSV / JSON export, HTML report;</text><text x="1319" y="518" class="small muted">deployment via Docker / Render.</text>
   <!-- directional connectors -->
@@ -69,19 +69,19 @@
   <rect x="686" y="665" width="324" height="77" rx="14" fill="#211f2c" stroke="#9280c6"/><text x="706" y="695" class="tag" fill="#c6b6ff">DEMO PROVIDER</text><text x="706" y="722" class="small">Bundled NVD JSON / Parquet catalog</text>
   <rect x="686" y="758" width="324" height="77" rx="14" fill="#28211e" stroke="#e18b45"/><text x="706" y="788" class="tag" fill="#ffb66a">OPTIONAL SNOWFLAKE PROVIDER</text><text x="706" y="815" class="small">CVE view • bounded, read-only query</text>
   <path d="M654 755v-51h25m-25 51v42h25" fill="none" stroke="#f5a04c" stroke-width="2.5" marker-end="url(#arrow)"/>
-  <text x="66" y="885" class="tiny muted">Optional side workflows: NVD feed import → local DEMO or configured writable Snowflake target; Hugging Face import → separate task-specific training.</text>
-  <text x="66" y="912" class="tiny muted">No user SQL • credentials stay backend-only • live NVD table verified in Snowflake • not a Marketplace listing.</text>
+  <text x="66" y="885" class="tiny muted">Optional side workflows: NVD/Hugging Face discovery • Snowpark transforms • Cortex COMPLETE • grouped held-out task training.</text>
+  <text x="66" y="912" class="tiny muted">Audit writes use a separate identity • read paths remain bounded • live table is NVD-origin data, not a Marketplace listing.</text>
 
   <!-- Technology stack -->
   <rect x="1063" y="579" width="499" height="362" rx="20" fill="#1c1a25" stroke="#51495e" stroke-width="1.5" filter="url(#shadow)"/>
   <text x="1090" y="616" class="section">Technology stack</text>
-  <g class="small"><text x="1092" y="660" fill="#ffb66a" font-weight="700">Dashboard</text><text x="1270" y="660">React 18 • TypeScript • Vite • Recharts</text><path d="M1090 674h445" stroke="#403a49"/>
+  <g class="small"><text x="1092" y="660" fill="#ffb66a" font-weight="700">Dashboard</text><text x="1270" y="660">React 18 • TypeScript • Streamlit</text><path d="M1090 674h445" stroke="#403a49"/>
     <text x="1092" y="703" fill="#ffb66a" font-weight="700">API</text><text x="1270" y="703">Python • Flask • Pydantic</text><path d="M1090 717h445" stroke="#403a49"/>
-    <text x="1092" y="746" fill="#ffb66a" font-weight="700">Analytics</text><text x="1270" y="746">pandas • scikit-learn</text><path d="M1090 760h445" stroke="#403a49"/>
+    <text x="1092" y="746" fill="#ffb66a" font-weight="700">Analytics</text><text x="1270" y="746">pandas • scikit-learn • Snowpark</text><path d="M1090 760h445" stroke="#403a49"/>
     <text x="1092" y="789" fill="#ffb66a" font-weight="700">Data</text><text x="1270" y="789">NVD CVE 2.0 • optional Snowflake</text><path d="M1090 803h445" stroke="#403a49"/>
-    <text x="1092" y="832" fill="#ffb66a" font-weight="700">Optional AI</text><text x="1270" y="832">NVIDIA NIM • Kimi • DeepSeek</text><path d="M1090 846h445" stroke="#403a49"/>
+    <text x="1092" y="832" fill="#ffb66a" font-weight="700">Optional AI</text><text x="1270" y="832">Snowflake Cortex • NIM • Kimi</text><path d="M1090 846h445" stroke="#403a49"/>
     <text x="1092" y="875" fill="#ffb66a" font-weight="700">Deploy</text><text x="1270" y="875">Docker • Render • Vercel config</text><path d="M1090 889h445" stroke="#403a49"/>
-    <text x="1092" y="918" fill="#ffb66a" font-weight="700">Storage</text><text x="1270" y="918">Local files • optional Snowflake table</text></g>
+    <text x="1092" y="918" fill="#ffb66a" font-weight="700">Storage</text><text x="1270" y="918">NVD table • append-only audit events</text></g>
 
   <!-- strengths / honest scope -->
   <rect x="38" y="967" width="1524" height="88" rx="17" fill="#211e2c" stroke="#454052"/>

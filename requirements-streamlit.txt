@@ -1,0 +1,4 @@
+# Optional native Snowflake Streamlit and Snowpark local runtime.
+-r backend/requirements.txt
+snowflake-snowpark-python>=1.30,<2
+streamlit>=1.40,<2
