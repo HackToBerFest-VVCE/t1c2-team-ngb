@@ -123,8 +123,9 @@ export interface AIInsights {
 
 export interface RiskMethod {
   name: string;
-  formula: string;
-  recency: string;
+  source: string;
+  scale: string;
+  ranking: string;
   missing: string;
   warning: string;
 }

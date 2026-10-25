@@ -3,7 +3,7 @@
  *
  * Contains:
  * - Trends: Time series publication volume & severity distribution via Recharts
- * - Risk: Transparent triage priority scoring & interactive simulator
+ * - CVSS Analysis: Source-provided CVSS base severity and coverage
  * - ML: Unsupervised TF-IDF clustering & Isolation Forest anomaly detection
  * - DataExplorer: Data provenance, completeness meters & schema audit
  * - Reports: Executive report generation & evidence-ready exports
@@ -36,8 +36,6 @@ import {
   Server,
   Shield,
   ShieldAlert,
-  ShieldCheck,
-  Sliders,
   Sparkles,
 } from 'lucide-react';
 import {
@@ -285,17 +283,13 @@ export function Trends() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// 2. RISK ANALYSIS & INTERACTIVE TRIAGE SIMULATOR
+// 2. SOURCE CVSS ANALYSIS
 // ═══════════════════════════════════════════════════════════════════════
 
 export function Risk() {
   const [data, setData] = useState<RiskResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-
-  // Simulator state
-  const [simCvss, setSimCvss] = useState<number>(8.5);
-  const [simDays, setSimDays] = useState<number>(14);
 
   const loadRisk = () => {
     setLoading(true);
@@ -314,20 +308,16 @@ export function Risk() {
     loadRisk();
   }, []);
 
-  // Compute simulated priority score
-  const simScore = useMemo(() => {
-    const cvssNorm = Math.min(1.0, Math.max(0.0, simCvss / 10.0));
-    const recency = Math.max(0.0, 1.0 - simDays / 365.0);
-    const raw = 0.8 * cvssNorm + 0.2 * recency;
-    return Math.round(raw * 1000) / 10;
-  }, [simCvss, simDays]);
+  const visibleItems = data?.items.slice(0, 15) ?? [];
+  const scoredCount = visibleItems.filter(item => item.cvss_score != null).length;
+  const unscoredCount = visibleItems.length - scoredCount;
 
   return (
     <div className="risk-page animate-fade-in">
       <PageHeading
-        eyebrow="TRANSPARENT TRIAGE HEURISTIC"
-        title="Risk Analysis"
-        description="Explainable prioritization algorithm separating verified source facts from local heuristics."
+        eyebrow="SOURCE CVSS BASE SCORES"
+        title="CVSS Analysis"
+        description="Compare source-provided vulnerability severity scores. Scores are not adjusted by ThreatLens."
       />
 
       {error ? (
@@ -336,120 +326,64 @@ export function Risk() {
         <Loading />
       ) : !data ? null : (
         <>
-          <div className="notice">
+          <div className="notice blue-notice">
             <Info size={17} />
             <div>
-              <b>Local Triage Heuristic Notice</b>
-              <span>{data.method.warning}</span>
+              <b>CVSS measures severity, not organizational risk</b>
+              <span>{data.method.warning} Check the linked source record for its CVSS version and vector.</span>
             </div>
           </div>
 
-          {/* Methodology & Simulator Grid */}
+          {/* Source-score provenance and coverage */}
           <div className="method-grid">
             <Card
-              title="Prioritization formula"
-              subtitle="Explicit, reproducible weighting model"
+              title="Source CVSS Base Score"
+              subtitle="The source score is displayed as provided, without recency weighting."
             >
               <div className="formula-box">
-                <code>{data.method.formula}</code>
+                <code>{data.method.scale}</code>
               </div>
               <div className="method-rows">
-                <p>
-                  <b>Recency factor:</b> {data.method.recency}
-                </p>
-                <p>
-                  <b>Missing data handling:</b> {data.method.missing}
-                </p>
+                <p><b>Source:</b> {data.method.source}</p>
+                <p><b>Ranking:</b> {data.method.ranking}</p>
               </div>
             </Card>
 
             <Card
-              title="Interactive priority simulator"
-              subtitle="Test how CVSS and publication age influence local triage"
+              title="Score coverage in this list"
+              subtitle="Only records with a source CVSS score are ranked as scored."
             >
-              <div className="simulator-controls">
-                <div className="slider-control">
-                  <div className="slider-label">
-                    <span>CVSS Score:</span>
-                    <b>{simCvss.toFixed(1)} / 10.0</b>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="10"
-                    step="0.1"
-                    value={simCvss}
-                    onChange={e => setSimCvss(parseFloat(e.target.value))}
-                  />
-                </div>
-
-                <div className="slider-control">
-                  <div className="slider-label">
-                    <span>Age (Days since publication):</span>
-                    <b>{simDays} days</b>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="365"
-                    step="5"
-                    value={simDays}
-                    onChange={e => setSimDays(parseInt(e.target.value, 10))}
-                  />
-                </div>
-
-                <div className="sim-result-card">
-                  <div>
-                    <small>CALCULATED PRIORITY INDEX</small>
-                    <div className="sim-score-val">{simScore.toFixed(1)} / 100</div>
-                  </div>
-                  <Badge
-                    tone={
-                      simScore >= 80 ? 'red' : simScore >= 60 ? 'amber' : simScore >= 40 ? 'yellow' : 'green'
-                    }
-                  >
-                    {simScore >= 80 ? 'CRITICAL TIER' : simScore >= 60 ? 'ELEVATED' : 'MODERATE'}
-                  </Badge>
-                </div>
+              <div className="cvss-coverage">
+                <strong>{scoredCount.toLocaleString()}</strong>
+                <span>of {visibleItems.length.toLocaleString()} visible rows have a CVSS score.</span>
+                <Badge tone={unscoredCount > 0 ? 'gray' : 'green'}>
+                  {unscoredCount.toLocaleString()} unscored
+                </Badge>
+              </div>
+              <div className="method-rows">
+                <p><b>Unscored records:</b> {data.method.missing}</p>
               </div>
             </Card>
           </div>
 
-          {/* Evidence Types Distinction */}
-          <div className="banner" style={{ marginTop: 20 }}>
-            <div className="banner-icon">
-              <ShieldCheck size={18} />
-            </div>
-            <div>
-              <b>Evidence Category Taxonomy</b>
-              <span>Always distinguish ground-truth supplier telemetry from derived heuristics.</span>
-            </div>
-            <div className="evidence-tags-row">
-              <Badge tone="blue">SOURCE FACT (NVD CVSS)</Badge>
-              <Badge tone="violet">LOCAL SCORE (ThreatLens)</Badge>
-              <Badge tone="amber">MODEL SIGNAL (Unsupervised ML)</Badge>
-            </div>
-          </div>
-
-          {/* Prioritized Vulnerabilities Table */}
+          {/* Source-scored vulnerability table */}
           <Card
-            title="Highest priority records"
-            subtitle="Sorted by local priority score (80% CVSS + 20% Recency) with deterministic tie-breaking by newest publication timestamp"
+            title="Highest CVSS scores"
+            subtitle={data.method.ranking}
           >
             <div className="table-wrap">
-              <table>
+              <table className="analysis-table">
                 <thead>
                   <tr>
                     <th>CVE IDENTIFIER</th>
-                    <th>SEVERITY</th>
-                    <th>SOURCE CVSS</th>
-                    <th>LOCAL PRIORITY</th>
-                    <th>PUBLISHED</th>
-                    <th style={{ textAlign: 'right' }}>EVIDENCE</th>
+                    <th>SOURCE SEVERITY</th>
+                    <th>CVSS BASE SCORE</th>
+                    <th>PUBLISHED (UTC)</th>
+                    <th style={{ textAlign: 'right' }}>NVD RECORD</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {data.items.slice(0, 15).map(v => (
+                  {visibleItems.map(v => (
                     <tr key={v.cve_id} className="table-row-hover">
                       <td>
                         <b className="mono">{v.cve_id}</b>
@@ -459,50 +393,22 @@ export function Risk() {
                         </small>
                       </td>
                       <td>
-                        <SeverityBadge severity={v.severity} />
+                        {v.severity === 'UNKNOWN' && v.cvss_score == null ? (
+                          <Badge tone="gray" title="No CVSS score is present in the source record.">UNSCORED</Badge>
+                        ) : <SeverityBadge severity={v.severity} />}
                       </td>
                       <td>
-                        <span className="mono-score">{v.cvss_score?.toFixed(1) ?? '—'}</span>
+                        {v.cvss_score != null ? (
+                          <span className="cvss-score-value" title="Source-provided CVSS Base Score">
+                            {v.cvss_score.toFixed(1)}<small> / 10.0</small>
+                          </span>
+                        ) : <span className="unscored-value">Not scored</span>}
                       </td>
-                      <td>
-                        <div
-                          className="priority-bar-cell"
-                          title={
-                            v.priority_score != null
-                              ? `Score: ${v.priority_score.toFixed(1)} / 100 (CVSS: ${v.cvss_score?.toFixed(1) ?? '—'} · Published: ${v.published ? new Date(v.published).toUTCString() : '—'})`
-                              : undefined
-                          }
-                        >
-                          <strong className="priority">
-                            {v.priority_score != null ? v.priority_score.toFixed(1) : '—'}
-                          </strong>
-                          {v.priority_score != null && (
-                            <div className="priority-mini-bar">
-                              <span style={{ width: `${Math.min(100, v.priority_score)}%` }} />
-                            </div>
-                          )}
-                        </div>
-                      </td>
-                      <td title={v.published ? `Full UTC Timestamp: ${v.published}` : undefined}>
+                      <td title={v.published ? `Full source timestamp: ${v.published}` : undefined}>
                         {v.published ? (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                            <span style={{ fontSize: '0.82rem', fontWeight: 500 }}>
-                              {new Date(v.published).toLocaleDateString(undefined, {
-                                year: 'numeric',
-                                month: 'short',
-                                day: 'numeric',
-                                timeZone: 'UTC',
-                              })}
-                            </span>
-                            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted, #94a3b8)' }}>
-                              {new Date(v.published).toLocaleTimeString(undefined, {
-                                hour: '2-digit',
-                                minute: '2-digit',
-                                timeZone: 'UTC',
-                              })}{' '}
-                              UTC
-                            </span>
-                          </div>
+                          new Intl.DateTimeFormat(undefined, {
+                            year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC',
+                          }).format(new Date(v.published))
                         ) : (
                           '—'
                         )}

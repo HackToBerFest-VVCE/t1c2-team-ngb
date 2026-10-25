@@ -511,7 +511,7 @@ nav {
   align-items: center;
   justify-content: space-between;
   padding: 0 34px;
-  background: rgba(8, 11, 18, 0.6);
+  background: var(--bg-root);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   position: sticky;
@@ -2326,6 +2326,65 @@ select option:hover {
 .date-cell {
   color: var(--text-secondary);
   font-size: 12px;
+}
+
+.explorer-table tbody td {
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+.explorer-table .row-desc {
+  display: -webkit-box;
+  max-width: min(540px, 46vw);
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-height: 1.5;
+}
+
+.cvss-score-value {
+  color: #cbd6ff;
+  font: 600 12px var(--font-mono);
+  white-space: nowrap;
+}
+
+.cvss-score-value small {
+  color: var(--text-tertiary);
+  font: 400 10px var(--font-sans);
+}
+
+.unscored-value {
+  color: var(--text-tertiary);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.published-date {
+  color: var(--text-secondary);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.cvss-coverage {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 8px 0 14px;
+}
+
+.cvss-coverage > strong {
+  color: var(--text-primary);
+  font: 600 24px var(--font-mono);
+}
+
+.cvss-coverage > span {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.cvss-coverage + .method-rows {
+  margin-top: 8px;
 }
 
 /* ─── Empty State ─────────────────────────────────────────────────── */

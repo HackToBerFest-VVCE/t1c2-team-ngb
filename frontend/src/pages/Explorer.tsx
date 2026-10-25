@@ -2,7 +2,7 @@
  * ThreatLens AI — Vulnerability Explorer
  *
  * Search, filter, inspect, and export normalized CVE records with
- * detailed modal inspection and provenance links to NIST NVD.
+ * CVSS-first ranking, source severity labels, detailed inspection, and NVD links.
  */
 
 import { useEffect, useState, useTransition } from 'react';
@@ -33,7 +33,26 @@ import {
   showToast,
 } from '../components/Shell';
 
-const SEVERITIES = ['ALL', 'CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'NONE'];
+const SEVERITIES = ['ALL', 'CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'NONE', 'UNKNOWN'];
+
+function formatUtcDate(value: string | null): string {
+  if (!value) return 'Not recorded';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Not recorded';
+  return new Intl.DateTimeFormat(undefined, {
+    year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC',
+  }).format(date);
+}
+
+function formatUtcTime(value: string | null): string {
+  if (!value) return 'Time not recorded';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Time not recorded';
+  const time = new Intl.DateTimeFormat('en-GB', {
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23', timeZone: 'UTC',
+  }).format(date);
+  return `${time} UTC`;
+}
 
 export default function Explorer() {
   const [query, setQuery] = useState('');
@@ -45,7 +64,7 @@ export default function Explorer() {
   const [minScore, setMinScore] = useState('');
   const [maxScore, setMaxScore] = useState('');
   const [cwe, setCwe] = useState('');
-  const [sort, setSort] = useState<VulnerabilityFilters['sort']>('published');
+  const [sort, setSort] = useState<VulnerabilityFilters['sort']>('cvss_score');
   const [order, setOrder] = useState<VulnerabilityFilters['order']>('desc');
   const [data, setData] = useState<PaginatedResponse<Vulnerability> | null>(null);
   const [selectedCve, setSelectedCve] = useState<Vulnerability | null>(null);
@@ -129,7 +148,7 @@ export default function Explorer() {
 
   const resetFilters = () => {
     setQuery(''); setSeverity(''); setFromDate(''); setToDate('');
-    setMinScore(''); setMaxScore(''); setCwe(''); setSort('published'); setOrder('desc'); setPage(1);
+    setMinScore(''); setMaxScore(''); setCwe(''); setSort('cvss_score'); setOrder('desc'); setPage(1);
   };
 
   return (
@@ -138,7 +157,7 @@ export default function Explorer() {
       <PageHeading
         eyebrow="SOURCE RECORDS"
         title="Vulnerability Explorer"
-        description="Search, filter, and drill into CVE records with verified source evidence."
+        description="Explore NVD records ranked by source CVSS Base Score, with clear unscored status and direct evidence links."
         action={
           <div className="button-group">
             <button
@@ -162,7 +181,7 @@ export default function Explorer() {
       {/* ── Main Explorer Card ────────────────────────────────────── */}
       <Card
         title="Record catalog"
-        subtitle="Filter by CVE identifier, keyword, CVSS severity, or weakness class"
+        subtitle="Filter by CVE, source severity, CVSS Base Score, publication date, or weakness class"
       >
         {/* Search & Filter Toolbar */}
         <div className="filter-toolbar">
@@ -228,7 +247,7 @@ export default function Explorer() {
           <label>CVSS minimum<input type="number" min="0" max="10" step="0.1" placeholder="0.0" value={minScore} onChange={e => { setPage(1); setMinScore(e.target.value); }} /></label>
           <label>CVSS maximum<input type="number" min="0" max="10" step="0.1" placeholder="10.0" value={maxScore} onChange={e => { setPage(1); setMaxScore(e.target.value); }} /></label>
           <label>CWE<input type="search" maxLength={100} placeholder="e.g. CWE-79" value={cwe} onChange={e => { setPage(1); setCwe(e.target.value); }} /></label>
-          <label>Sort by<select value={sort} onChange={e => { setPage(1); setSort(e.target.value as VulnerabilityFilters['sort']); }}><option value="published">Published date</option><option value="cvss_score">CVSS score</option><option value="priority_score">Priority score</option><option value="cve_id">CVE ID</option></select></label>
+          <label>Sort by<select value={sort} onChange={e => { setPage(1); setSort(e.target.value as VulnerabilityFilters['sort']); }}><option value="cvss_score">Source CVSS score</option><option value="published">Published date</option><option value="cve_id">CVE ID</option></select></label>
           <label>Order<select value={order} onChange={e => { setPage(1); setOrder(e.target.value as VulnerabilityFilters['order']); }}><option value="desc">Descending</option><option value="asc">Ascending</option></select></label>
           <button className="button-secondary explorer-reset" onClick={resetFilters}>Reset filters</button>
         </div>
@@ -249,7 +268,7 @@ export default function Explorer() {
                   setSeverity(s === 'ALL' ? '' : s);
                 }}
               >
-                {s}
+                {s === 'UNKNOWN' ? 'UNSCORED' : s}
               </button>
             );
           })}
@@ -266,14 +285,13 @@ export default function Explorer() {
         ) : (
           <>
             <div className="table-wrap">
-              <table>
+              <table className="explorer-table">
                 <thead>
                   <tr>
                     <th>CVE RECORD</th>
-                    <th>SEVERITY</th>
-                    <th>CVSS</th>
-                    <th>PRIORITY</th>
-                    <th>PUBLISHED</th>
+                    <th>SOURCE SEVERITY</th>
+                    <th>CVSS BASE SCORE</th>
+                    <th>PUBLISHED (UTC)</th>
                     <th style={{ textAlign: 'right' }}>ACTION</th>
                   </tr>
                 </thead>
@@ -294,38 +312,20 @@ export default function Explorer() {
                         </small>
                       </td>
                       <td>
-                        <SeverityBadge severity={v.severity} />
+                        {v.severity === 'UNKNOWN' && v.cvss_score == null ? (
+                          <Badge tone="gray" title="No CVSS score is present in the source record.">UNSCORED</Badge>
+                        ) : <SeverityBadge severity={v.severity} />}
                       </td>
                       <td>
-                        <span className="mono-score">
-                          {v.cvss_score != null ? v.cvss_score.toFixed(1) : '—'}
-                        </span>
+                        {v.cvss_score != null ? (
+                          <span className="cvss-score-value" title="Source-provided CVSS Base Score">
+                            {v.cvss_score.toFixed(1)}<small> / 10.0</small>
+                          </span>
+                        ) : <span className="unscored-value">Not scored</span>}
                       </td>
-                      <td>
-                        <span className="priority-badge">
-                          {v.priority_score != null ? v.priority_score.toFixed(1) : '—'}
-                        </span>
-                      </td>
-                      <td className="date-cell" title={v.published ? `Full UTC Timestamp: ${v.published}` : undefined}>
+                      <td className="date-cell" title={v.published ? `Full source timestamp: ${v.published}` : undefined}>
                         {v.published ? (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                            <span style={{ fontSize: '0.82rem', fontWeight: 500 }}>
-                              {new Date(v.published).toLocaleDateString(undefined, {
-                                year: 'numeric',
-                                month: 'short',
-                                day: 'numeric',
-                                timeZone: 'UTC',
-                              })}
-                            </span>
-                            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted, #94a3b8)' }}>
-                              {new Date(v.published).toLocaleTimeString(undefined, {
-                                hour: '2-digit',
-                                minute: '2-digit',
-                                timeZone: 'UTC',
-                              })}{' '}
-                              UTC
-                            </span>
-                          </div>
+                          <span className="published-date">{formatUtcDate(v.published)}</span>
                         ) : (
                           '—'
                         )}
@@ -346,7 +346,7 @@ export default function Explorer() {
                   ))}
                   {data?.items.length === 0 && (
                     <tr>
-                      <td colSpan={6}>
+                      <td colSpan={5}>
                         <div className="empty-state">
                           <Shield size={32} className="muted-icon" />
                           <b>No matching vulnerabilities</b>
@@ -430,16 +430,13 @@ export default function Explorer() {
             </div>
 
             <div className="modal-badges">
-              <SeverityBadge severity={selectedCve.severity} />
+              {selectedCve.severity === 'UNKNOWN' && selectedCve.cvss_score == null ? (
+                <Badge tone="gray" title="No CVSS score is present in the source record.">UNSCORED</Badge>
+              ) : <SeverityBadge severity={selectedCve.severity} />}
               {selectedCve.cwe && <Badge tone="blue">{selectedCve.cwe}</Badge>}
               {selectedCve.cvss_score != null && (
                 <Badge tone="gray">
                   CVSS Base: <b>{selectedCve.cvss_score.toFixed(1)}</b>
-                </Badge>
-              )}
-              {selectedCve.priority_score != null && (
-                <Badge tone="violet">
-                  Priority Index: <b>{selectedCve.priority_score.toFixed(1)}/100</b>
                 </Badge>
               )}
             </div>
@@ -456,13 +453,7 @@ export default function Explorer() {
                 <small>Published Date</small>
                 <span>
                   <Calendar size={13} />{' '}
-                  {selectedCve.published
-                    ? new Date(selectedCve.published).toLocaleDateString(undefined, {
-                        year: 'numeric',
-                        month: 'short',
-                        day: 'numeric',
-                      })
-                    : 'Not recorded'}
+                  {formatUtcDate(selectedCve.published)} · {formatUtcTime(selectedCve.published)}
                 </span>
               </div>
 
@@ -470,29 +461,14 @@ export default function Explorer() {
                 <small>Last Modified</small>
                 <span>
                   <Calendar size={13} />{' '}
-                  {selectedCve.last_modified
-                    ? new Date(selectedCve.last_modified).toLocaleDateString(undefined, {
-                        year: 'numeric',
-                        month: 'short',
-                        day: 'numeric',
-                      })
-                    : 'Not recorded'}
+                  {formatUtcDate(selectedCve.last_modified)} · {formatUtcTime(selectedCve.last_modified)}
                 </span>
               </div>
 
               <div className="field-item">
                 <small>CVSS Score (NVD)</small>
                 <span className="mono bold">
-                  {selectedCve.cvss_score != null ? selectedCve.cvss_score.toFixed(1) : 'N/A'}
-                </span>
-              </div>
-
-              <div className="field-item">
-                <small>ThreatLens Priority Score</small>
-                <span className="mono bold" style={{ color: 'var(--violet)' }}>
-                  {selectedCve.priority_score != null
-                    ? `${selectedCve.priority_score.toFixed(1)} / 100`
-                    : 'N/A'}
+                  {selectedCve.cvss_score != null ? `${selectedCve.cvss_score.toFixed(1)} / 10.0` : 'Not scored in source'}
                 </span>
               </div>
             </div>

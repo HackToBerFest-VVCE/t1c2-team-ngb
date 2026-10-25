@@ -237,7 +237,7 @@ def vulnerabilities():
             ]
 
         # ── Sorting ───────────────────────────────────────────────────
-        sort = request.args.get("sort", "published")
+        sort = request.args.get("sort", "cvss_score")
         allowed_sorts = {"published", "cvss_score", "priority_score", "cve_id"}
         if sort not in allowed_sorts:
             return _error(
@@ -249,8 +249,19 @@ def vulnerabilities():
             return _error(
                 "invalid_parameter", "order must be asc or desc.", 400
             )
+        sort_columns = [sort]
+        ascending = [order == "asc"]
+        if sort == "cvss_score":
+            sort_columns.extend(["published", "cve_id"])
+            ascending.extend([False, True])
+        elif sort == "published":
+            sort_columns.append("cve_id")
+            ascending.append(True)
         frame = frame.sort_values(
-            sort, ascending=(order == "asc"), na_position="last"
+            sort_columns,
+            ascending=ascending,
+            na_position="last",
+            kind="mergesort",
         )
 
         # ── Pagination ────────────────────────────────────────────────
@@ -442,36 +453,44 @@ def ai_insights():
 # ── Risk analysis ─────────────────────────────────────────────────────
 
 RISK_METHOD = {
-    "name": "ThreatLens priority score",
-    "formula": "100 × (0.8 × CVSS/10 + 0.2 × recency)",
-    "recency": (
-        "max(0, 1 - age_days/365), based on publication date in UTC"
+    "name": "NVD CVSS Base Score",
+    "source": (
+        "Source-provided CVSS Base Score and severity; follow each CVE link "
+        "to confirm the NVD assessment, CVSS version, and vector."
+    ),
+    "scale": "0.0–10.0; displayed without recency or local score adjustments.",
+    "ranking": (
+        "Highest source CVSS Base Score first; ties use publication date, "
+        "then CVE ID."
     ),
     "missing": (
-        "If CVSS is absent, use recency only (max 20); "
-        "if publication date is absent, use CVSS only; "
-        "if both are absent, score is unavailable."
+        "Records with no source CVSS score remain unscored and are placed "
+        "after scored records. No score is inferred."
     ),
     "warning": (
-        "Custom investigation-priority heuristic; not an official CVSS "
-        "score and not evidence of exploitation."
+        "CVSS describes vulnerability severity, not organization-specific "
+        "risk or proof of exploitation."
     ),
 }
 
 
 @api.get("/risk-analysis")
 def risk():
-    """Prioritised record list with transparent methodology."""
+    """Rank CVE records by the source-provided CVSS Base Score."""
     frame = _records()
     top = frame.sort_values(
-        ["priority_score", "published", "cvss_score"],
-        ascending=[False, False, False],
+        ["cvss_score", "published", "cve_id"],
+        ascending=[False, False, True],
         na_position="last",
+        kind="mergesort",
     ).head(100)
+    items = _public_rows(top)
+    for item in items:
+        item.pop("priority_score", None)
 
     return jsonify({
         "method": RISK_METHOD,
-        "items": _public_rows(top),
+        "items": items,
     })
 
 

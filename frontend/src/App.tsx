@@ -25,7 +25,7 @@ const PAGES: Record<string, React.FC<any>> = {
   'Overview': Overview,
   'Vulnerability Explorer': Explorer,
   'Threat Trends': Trends,
-  'Risk Analysis': Risk,
+  'CVSS Analysis': Risk,
   'ML Insights': ML,
   'Data Explorer': DataExplorer,
   'Reports': Reports,

@@ -8,6 +8,8 @@ Official severity and CVSS values are displayed exactly as available from NVD/th
 
 Publication age is computed in UTC from `PUBLISHED`. The recency term reaches zero at 365 days. When CVSS is absent, the available recency component is rescaled to its 20-point contribution; when publication date is absent, CVSS contributes its full normalized 80-point weight. If both are missing, priority is unavailable. This is only an investigation ordering aid; it is not CVSS, an exploit prediction, or proof of active attack.
 
+The CVSS Analysis page ranks directly by the source-provided CVSS Base Score and does not apply ThreatLens priority or recency adjustments. Records with no source score remain unscored and appear after scored records. CVSS is a severity measure, not organization-specific risk; follow the linked NVD record to verify its CVSS version and vector.
+
 ## ML
 
 Descriptions are vectorized with TF-IDF (unigrams and bigrams, max 500 features); K-means uses deterministic seed 42 and a cluster count bounded by sample size. Cluster top terms and representative records are exposed. Silhouette is reported only when defined. A most-frequent-cluster baseline is reported descriptively, not as accuracy. Isolation Forest uses the text vector and median-imputed CVSS, 100 trees, seed 42; lower decision values are more unusual. When more than 5,000 described rows are available, a deterministic 5,000-row sample is used for ML to bound CPU/RAM; dashboards and aggregates use the full loaded result set. The minimum dataset for either analysis is four non-empty descriptions. No labels exist, so accuracy/precision/recall are not reported. Text clusters and anomaly scores do not establish maliciousness or exploitation.

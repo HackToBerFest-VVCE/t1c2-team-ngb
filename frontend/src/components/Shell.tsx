@@ -33,7 +33,7 @@ const NAV_ITEMS = [
   ['Overview', LayoutDashboard],
   ['Vulnerability Explorer', Search],
   ['Threat Trends', ChartNoAxesCombined],
-  ['Risk Analysis', ShieldCheck],
+  ['CVSS Analysis', ShieldCheck],
   ['ML Insights', Sparkles],
   ['Data Explorer', Database],
   ['Reports', FileText],
@@ -322,10 +322,11 @@ export function SkeletonText({ lines = 3 }: { lines?: number }) {
 interface BadgeProps {
   children: ReactNode;
   tone?: string;
+  title?: string;
 }
 
-export function Badge({ children, tone = 'blue' }: BadgeProps) {
-  return <span className={`badge ${tone}`}>{children}</span>;
+export function Badge({ children, tone = 'blue', title }: BadgeProps) {
+  return <span className={`badge ${tone}`} title={title}>{children}</span>;
 }
 
 // ─── Severity badge ──────────────────────────────────────────────────

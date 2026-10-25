@@ -36,11 +36,12 @@ vi.mock('../api', () => ({
     if (path === '/risk-analysis') {
       return Promise.resolve({
         method: {
-          name: 'ThreatLens Priority',
-          formula: '0.8 * CVSS + 0.2 * Recency',
-          recency: 'Linear decay over 730 days',
-          missing: 'Defaults to 5.0 CVSS',
-          warning: 'Not an exploit indicator',
+          name: 'NVD CVSS Base Score',
+          source: 'NVD record',
+          scale: '0.0–10.0',
+          ranking: 'Highest score first',
+          missing: 'No score is inferred',
+          warning: 'CVSS describes severity, not risk',
         },
         items: [
           {
@@ -169,12 +170,12 @@ describe('Analysis Pages', () => {
     });
   });
 
-  it('renders Risk analysis and simulator', async () => {
+  it('renders CVSS analysis and source-score coverage', async () => {
     render(<Risk />);
-    expect(screen.getByText('Risk Analysis')).toBeInTheDocument();
+    expect(screen.getByText('CVSS Analysis')).toBeInTheDocument();
     await waitFor(() => {
       expect(screen.getByText('CVE-2026-7777')).toBeInTheDocument();
-      expect(screen.getByText('Interactive priority simulator')).toBeInTheDocument();
+      expect(screen.getByText('Score coverage in this list')).toBeInTheDocument();
     });
   });
 

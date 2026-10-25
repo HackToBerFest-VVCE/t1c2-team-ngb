@@ -348,7 +348,7 @@ class TestRiskAnalysis:
         data = r.get_json()
         assert "method" in data
         assert "items" in data
-        assert data["method"]["name"] == "ThreatLens priority score"
+        assert data["method"]["name"] == "NVD CVSS Base Score"
 
 
 class TestMLEndpoints:
