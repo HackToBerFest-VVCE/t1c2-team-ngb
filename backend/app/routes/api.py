@@ -371,7 +371,7 @@ def vulnerabilities():
             ]
 
         # ── Sorting ───────────────────────────────────────────────────
-        sort = request.args.get("sort", "cvss_score")
+        sort = request.args.get("sort", "published")
         allowed_sorts = {"published", "cvss_score", "priority_score", "cve_id"}
         if sort not in allowed_sorts:
             return _error(

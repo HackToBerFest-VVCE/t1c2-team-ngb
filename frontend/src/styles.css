@@ -2879,3 +2879,52 @@ input[type="range"]::-webkit-slider-thumb:hover {
   border-top: 1px solid var(--border-subtle);
 }
 
+/* ─── Sortable table headers ──────────────────────────────────────── */
+.sortable-th {
+  cursor: pointer;
+  user-select: none;
+  transition: color var(--duration-fast);
+}
+
+.sortable-th:hover {
+  color: var(--accent-blue);
+}
+
+.th-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.th-sort-icon {
+  flex-shrink: 0;
+  transition: all var(--duration-fast);
+}
+
+.th-sort-icon.inactive {
+  opacity: 0.3;
+}
+
+.th-sort-icon.active {
+  opacity: 1;
+  color: var(--accent-blue);
+}
+
+.score-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.priority-pill {
+  font: 500 9px var(--font-mono);
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(161, 138, 255, 0.12);
+  border: 1px solid rgba(161, 138, 255, 0.28);
+  color: #c4b5fd;
+  letter-spacing: 0.3px;
+}
+
+

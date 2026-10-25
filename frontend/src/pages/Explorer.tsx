@@ -7,6 +7,9 @@
 
 import { useEffect, useState, useTransition } from 'react';
 import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
   Calendar,
   Check,
   ChevronLeft,
@@ -16,6 +19,7 @@ import {
   ExternalLink,
   FileJson,
   Filter,
+  Info,
   Layers,
   Search,
   Shield,
@@ -64,7 +68,7 @@ export default function Explorer() {
   const [minScore, setMinScore] = useState('');
   const [maxScore, setMaxScore] = useState('');
   const [cwe, setCwe] = useState('');
-  const [sort, setSort] = useState<VulnerabilityFilters['sort']>('cvss_score');
+  const [sort, setSort] = useState<VulnerabilityFilters['sort']>('published');
   const [order, setOrder] = useState<VulnerabilityFilters['order']>('desc');
   const [data, setData] = useState<PaginatedResponse<Vulnerability> | null>(null);
   const [selectedCve, setSelectedCve] = useState<Vulnerability | null>(null);
@@ -146,9 +150,28 @@ export default function Explorer() {
     });
   };
 
+  const handleSortClick = (column: VulnerabilityFilters['sort']) => {
+    setPage(1);
+    if (sort === column) {
+      setOrder(o => (o === 'desc' ? 'asc' : 'desc'));
+    } else {
+      setSort(column);
+      setOrder(column === 'cve_id' ? 'asc' : 'desc');
+    }
+  };
+
+  const renderSortIcon = (column: VulnerabilityFilters['sort']) => {
+    if (sort !== column) return <ArrowUpDown size={13} className="th-sort-icon inactive" />;
+    return order === 'asc' ? (
+      <ArrowUp size={13} className="th-sort-icon active" />
+    ) : (
+      <ArrowDown size={13} className="th-sort-icon active" />
+    );
+  };
+
   const resetFilters = () => {
     setQuery(''); setSeverity(''); setFromDate(''); setToDate('');
-    setMinScore(''); setMaxScore(''); setCwe(''); setSort('cvss_score'); setOrder('desc'); setPage(1);
+    setMinScore(''); setMaxScore(''); setCwe(''); setSort('published'); setOrder('desc'); setPage(1);
   };
 
   return (
@@ -208,6 +231,27 @@ export default function Explorer() {
 
           <div className="filter-actions">
             <div className="select-wrap">
+              <ArrowUpDown size={14} />
+              <select
+                value={`${sort}-${order}`}
+                onChange={e => {
+                  setPage(1);
+                  const [s, o] = e.target.value.split('-');
+                  setSort(s as VulnerabilityFilters['sort']);
+                  setOrder(o as VulnerabilityFilters['order']);
+                }}
+                aria-label="Sort order"
+              >
+                <option value="published-desc">Newest Published</option>
+                <option value="published-asc">Oldest Published</option>
+                <option value="cvss_score-desc">Highest CVSS (10.0 first)</option>
+                <option value="cvss_score-asc">Lowest CVSS (0.0 first)</option>
+                <option value="priority_score-desc">Highest Priority Risk</option>
+                <option value="cve_id-asc">CVE ID (A → Z)</option>
+              </select>
+            </div>
+
+            <div className="select-wrap">
               <SlidersHorizontal size={14} />
               <select
                 value={severity}
@@ -247,7 +291,7 @@ export default function Explorer() {
           <label>CVSS minimum<input type="number" min="0" max="10" step="0.1" placeholder="0.0" value={minScore} onChange={e => { setPage(1); setMinScore(e.target.value); }} /></label>
           <label>CVSS maximum<input type="number" min="0" max="10" step="0.1" placeholder="10.0" value={maxScore} onChange={e => { setPage(1); setMaxScore(e.target.value); }} /></label>
           <label>CWE<input type="search" maxLength={100} placeholder="e.g. CWE-79" value={cwe} onChange={e => { setPage(1); setCwe(e.target.value); }} /></label>
-          <label>Sort by<select value={sort} onChange={e => { setPage(1); setSort(e.target.value as VulnerabilityFilters['sort']); }}><option value="cvss_score">Source CVSS score</option><option value="published">Published date</option><option value="cve_id">CVE ID</option></select></label>
+          <label>Sort by<select value={sort} onChange={e => { setPage(1); setSort(e.target.value as VulnerabilityFilters['sort']); }}><option value="published">Published date</option><option value="cvss_score">Source CVSS score</option><option value="priority_score">Priority score</option><option value="cve_id">CVE ID</option></select></label>
           <label>Order<select value={order} onChange={e => { setPage(1); setOrder(e.target.value as VulnerabilityFilters['order']); }}><option value="desc">Descending</option><option value="asc">Ascending</option></select></label>
           <button className="button-secondary explorer-reset" onClick={resetFilters}>Reset filters</button>
         </div>
@@ -277,6 +321,18 @@ export default function Explorer() {
           </div>
         </div>
 
+        {/* Informative notice when sorting by CVSS desc with all severities */}
+        {sort === 'cvss_score' && order === 'desc' && !severity && (
+          <div className="notice blue-notice" style={{ margin: '8px 0 16px', padding: '10px 14px' }}>
+            <Info size={15} />
+            <div>
+              <span>
+                Sorted by <b>Highest CVSS Base Score (10.0 first)</b>. The catalog contains 38,000+ Critical vulnerabilities with CVSS 10.0. Click the column headers or select a severity pill (High, Medium, Low) to explore other score tiers.
+              </span>
+            </div>
+          </div>
+        )}
+
         {/* Data Table */}
         {error ? (
           <Loading error={error} onRetry={loadVulnerabilities} />
@@ -288,10 +344,37 @@ export default function Explorer() {
               <table className="explorer-table">
                 <thead>
                   <tr>
-                    <th>CVE RECORD</th>
+                    <th
+                      className="sortable-th"
+                      onClick={() => handleSortClick('cve_id')}
+                      title="Click to sort by CVE ID"
+                    >
+                      <div className="th-content">
+                        <span>CVE RECORD</span>
+                        {renderSortIcon('cve_id')}
+                      </div>
+                    </th>
                     <th>SOURCE SEVERITY</th>
-                    <th>CVSS BASE SCORE</th>
-                    <th>PUBLISHED (UTC)</th>
+                    <th
+                      className="sortable-th"
+                      onClick={() => handleSortClick('cvss_score')}
+                      title="Click to sort by CVSS Base Score"
+                    >
+                      <div className="th-content">
+                        <span>CVSS BASE SCORE</span>
+                        {renderSortIcon('cvss_score')}
+                      </div>
+                    </th>
+                    <th
+                      className="sortable-th"
+                      onClick={() => handleSortClick('published')}
+                      title="Click to sort by Published Date"
+                    >
+                      <div className="th-content">
+                        <span>PUBLISHED (UTC)</span>
+                        {renderSortIcon('published')}
+                      </div>
+                    </th>
                     <th style={{ textAlign: 'right' }}>ACTION</th>
                   </tr>
                 </thead>
@@ -318,9 +401,16 @@ export default function Explorer() {
                       </td>
                       <td>
                         {v.cvss_score != null ? (
-                          <span className="cvss-score-value" title="Source-provided CVSS Base Score">
-                            {v.cvss_score.toFixed(1)}<small> / 10.0</small>
-                          </span>
+                          <div className="score-cell">
+                            <span className="cvss-score-value" title="Source-provided CVSS Base Score">
+                              {v.cvss_score.toFixed(1)}<small> / 10.0</small>
+                            </span>
+                            {v.priority_score != null && (
+                              <span className="priority-pill" title="Operational triage priority score (0-100)">
+                                P{Math.round(v.priority_score)}
+                              </span>
+                            )}
+                          </div>
                         ) : <span className="unscored-value">Not scored</span>}
                       </td>
                       <td className="date-cell" title={v.published ? `Full source timestamp: ${v.published}` : undefined}>
