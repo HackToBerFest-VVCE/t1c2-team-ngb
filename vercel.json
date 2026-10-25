@@ -3,11 +3,15 @@
   "buildCommand": "npm --prefix frontend install && npm --prefix frontend run build && node scripts/copy-frontend.mjs",
   "rewrites": [
     {
-      "source": "/api/(.*)",
+      "source": "/api",
       "destination": "/api/index.py"
     },
     {
-      "source": "/((?!assets/|favicon.ico).*)",
+      "source": "/api/:path*",
+      "destination": "/api/index.py"
+    },
+    {
+      "source": "/((?!assets/|favicon.ico|api).*)",
       "destination": "/index.html"
     }
   ],
