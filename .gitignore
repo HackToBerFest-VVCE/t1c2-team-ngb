@@ -11,6 +11,8 @@ node_modules/
 dist/
 public/
 .DS_Store
+.codex-*/
+.codex-*.py
 
 # TypeScript build metadata
 *.tsbuildinfo

@@ -317,6 +317,9 @@ def vulnerabilities():
             if page_reader and sort != "priority_score":
                 page_frame, total = page_reader(page, per, sort, order)
                 if not page_frame.empty:
+                    for col in ("cve_id", "description", "published", "last_modified", "cvss_score", "severity", "cwe", "affected_products", "source_url"):
+                        if col not in page_frame:
+                            page_frame[col] = None
                     page_frame["published"] = pd.to_datetime(page_frame["published"], errors="coerce", utc=True)
                     page_frame["last_modified"] = pd.to_datetime(page_frame["last_modified"], errors="coerce", utc=True)
                     page_frame["cvss_score"] = pd.to_numeric(page_frame["cvss_score"], errors="coerce")

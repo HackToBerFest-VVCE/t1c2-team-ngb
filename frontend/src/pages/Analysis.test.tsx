@@ -215,6 +215,8 @@ describe('Analysis Pages', () => {
   it('renders Settings configuration view', async () => {
     render(<Settings source={{ mode: 'DEMO', connected: true, dataset: 'NVD', provider: 'NIST', updated_at: null, record_count: 100, note: '' }} />);
     expect(screen.getByText('Settings')).toBeInTheDocument();
-    expect(screen.getByText('Operational Mode')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('Operational Mode')).toBeInTheDocument();
+    });
   });
 });

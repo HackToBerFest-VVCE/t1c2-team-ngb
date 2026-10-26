@@ -10,7 +10,7 @@ import { SourceStatus } from '../api';
 // Mock Recharts components for jsdom compatibility
 vi.mock('recharts', () => ({
   ResponsiveContainer: ({ children }: any) => <div className="recharts-mock">{children}</div>,
-  AreaChart: ({ children }: any) => <div>{children}</div>,
+  AreaChart: ({ children }: any) => <svg>{children}</svg>,
   Area: () => null,
   CartesianGrid: () => null,
   XAxis: () => null,
