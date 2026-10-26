@@ -54,7 +54,7 @@ export interface VulnerabilityFilters {
   min_score?: string;
   max_score?: string;
   cwe?: string;
-  sort?: 'published' | 'cvss_score' | 'priority_score' | 'cve_id';
+  sort?: 'published' | 'cvss_score' | 'priority_score' | 'severity' | 'cve_id';
   order?: 'asc' | 'desc';
 }
 

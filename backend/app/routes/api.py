@@ -287,6 +287,53 @@ def summary():
 def vulnerabilities():
     """Paginated, filterable vulnerability list."""
     try:
+        # The unfiltered live catalog is the common pagination path. Ask
+        # Snowflake for just the requested page instead of transferring and
+        # sorting hundreds of thousands of rows inside a serverless request.
+        q = request.args.get("q", "").strip()
+        has_filters = any(request.args.get(key) for key in (
+            "q", "severity", "from", "to", "min_score", "max_score", "cwe"
+        ))
+        sort = request.args.get("sort", "severity")
+        order = request.args.get("order", "desc").lower()
+        allowed_sorts = {"published", "cvss_score", "priority_score", "severity", "cve_id"}
+        if sort not in allowed_sorts:
+            return _error("invalid_parameter", "Unsupported sort field.", 400)
+        if order not in {"asc", "desc"}:
+            return _error("invalid_parameter", "order must be asc or desc.", 400)
+
+        if len(q) > 200:
+            return _error("invalid_parameter", "q must be at most 200 characters.", 400)
+
+        try:
+            page = max(1, int(request.args.get("page", "1")))
+            per = max(1, min(100, int(request.args.get("per_page", "20"))))
+        except ValueError:
+            return _error("invalid_parameter", "page and per_page must be integers.", 400)
+
+        if mode() == "snowflake" and not has_filters:
+            provider = get_provider()
+            page_reader = getattr(provider, "page_records", None)
+            if page_reader:
+                page_frame, total = page_reader(page, per, sort, order)
+                if not page_frame.empty:
+                    page_frame["published"] = pd.to_datetime(page_frame["published"], errors="coerce", utc=True)
+                    page_frame["last_modified"] = pd.to_datetime(page_frame["last_modified"], errors="coerce", utc=True)
+                    page_frame["cvss_score"] = pd.to_numeric(page_frame["cvss_score"], errors="coerce")
+                    page_frame["severity"] = (
+                        page_frame["severity"].fillna("").astype("string[pyarrow]")
+                        .str.upper().replace({"": "UNKNOWN"})
+                    )
+                    page_frame["cve_id"] = page_frame["cve_id"].fillna("").astype("string[pyarrow]").str.upper()
+                    page_frame = add_priority(page_frame, copy=False)
+                return jsonify({
+                    "items": _public_rows(page_frame),
+                    "page": page,
+                    "per_page": per,
+                    "total": total,
+                    "pages": max(1, (total + per - 1) // per),
+                })
+
         frame = _records()
 
         # ── Text search ───────────────────────────────────────────────
@@ -379,21 +426,17 @@ def vulnerabilities():
             ]
 
         # ── Sorting ───────────────────────────────────────────────────
-        sort = request.args.get("sort", "published")
-        allowed_sorts = {"published", "cvss_score", "priority_score", "cve_id"}
-        if sort not in allowed_sorts:
-            return _error(
-                "invalid_parameter", "Unsupported sort field.", 400
-            )
-
-        order = request.args.get("order", "desc").lower()
-        if order not in {"asc", "desc"}:
-            return _error(
-                "invalid_parameter", "order must be asc or desc.", 400
-            )
         sort_columns = [sort]
         ascending = [order == "asc"]
-        if sort == "cvss_score":
+        if sort == "severity":
+            severity_rank = frame["severity"].map({
+                "CRITICAL": 0, "HIGH": 1, "MEDIUM": 2,
+                "LOW": 3, "NONE": 4, "UNKNOWN": 5,
+            })
+            frame = frame.assign(_severity_rank=severity_rank)
+            sort_columns = ["_severity_rank", "published", "cvss_score", "cve_id"]
+            ascending = [True, False, False, True]
+        elif sort == "cvss_score":
             sort_columns.extend(["published", "cve_id"])
             ascending.extend([False, True])
         elif sort == "published":
@@ -405,6 +448,8 @@ def vulnerabilities():
             na_position="last",
             kind="mergesort",
         )
+        if sort == "severity":
+            frame = frame.drop(columns=["_severity_rank"])
 
         # ── Pagination ────────────────────────────────────────────────
         try:
@@ -894,7 +939,7 @@ class ExportRequest(BaseModel):
     min_score: float | None = Field(default=None, ge=0, le=10)
     max_score: float | None = Field(default=None, ge=0, le=10)
     cwe: str | None = Field(default=None, max_length=100)
-    sort: Literal["published", "cvss_score", "priority_score", "cve_id"] = "published"
+    sort: Literal["published", "cvss_score", "priority_score", "severity", "cve_id"] = "published"
     order: Literal["asc", "desc"] = "desc"
 
 
@@ -953,7 +998,16 @@ def export_report():
         frame = frame[frame.cvss_score <= body.max_score]
     if body.cwe:
         frame = frame[frame.cwe.fillna("").astype(str).str.contains(body.cwe, case=False, regex=False)]
-    frame = frame.sort_values(body.sort, ascending=(body.order == "asc"), na_position="last")
+    if body.sort == "severity":
+        rank = frame["severity"].map({"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "NONE": 4, "UNKNOWN": 5})
+        frame = frame.assign(_severity_rank=rank).sort_values(
+            ["_severity_rank", "published", "cvss_score", "cve_id"],
+            ascending=[body.order == "asc", False, False, True],
+            na_position="last",
+            kind="mergesort",
+        ).drop(columns=["_severity_rank"])
+    else:
+        frame = frame.sort_values(body.sort, ascending=(body.order == "asc"), na_position="last")
 
     # ── JSON export ───────────────────────────────────────────────────
     if body.format == "json":

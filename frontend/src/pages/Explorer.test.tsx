@@ -9,10 +9,11 @@ import { api, downloadExport } from '../api';
 
 vi.mock('../api', () => ({
   api: vi.fn((url: string) => {
+    const page = Number(new URL(url, 'http://localhost').searchParams.get('page') ?? 1);
     return Promise.resolve({
       items: [
         {
-          cve_id: 'CVE-2026-9999',
+          cve_id: page === 2 ? 'CVE-2026-8888' : 'CVE-2026-9999',
           description: 'Remote code execution in core service daemon.',
           published: '2026-03-01T00:00:00Z',
           last_modified: '2026-03-02T00:00:00Z',
@@ -24,10 +25,10 @@ vi.mock('../api', () => ({
           priority_score: 94.5,
         },
       ],
-      page: 1,
+      page,
       per_page: 15,
-      total: 1,
-      pages: 1,
+      total: 20,
+      pages: 2,
     });
   }),
   downloadExport: vi.fn().mockResolvedValue(undefined),
@@ -62,6 +63,19 @@ describe('Vulnerability Explorer', () => {
     await waitFor(() => {
       expect(screen.getByText('SOURCE RECORD INSPECTION')).toBeInTheDocument();
       expect(screen.getByText('Enterprise Server 2026')).toBeInTheDocument();
+    });
+  });
+
+  it('loads and displays the next page instead of keeping stale rows', async () => {
+    const { container } = render(<Explorer />);
+    await screen.findByText('CVE-2026-9999');
+
+    fireEvent.click(screen.getByRole('button', { name: /Next/i }));
+
+    expect(await screen.findByText('CVE-2026-8888')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(container.querySelector('.page-info')).toHaveTextContent('Showing page 2 of 2');
+      expect(screen.queryByText('CVE-2026-9999')).not.toBeInTheDocument();
     });
   });
 

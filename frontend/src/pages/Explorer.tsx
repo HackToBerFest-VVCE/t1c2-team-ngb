@@ -5,7 +5,7 @@
  * CVSS-first ranking, source severity labels, detailed inspection, and NVD links.
  */
 
-import { useEffect, useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 import {
   ArrowDown,
   ArrowUp,
@@ -68,7 +68,7 @@ export default function Explorer() {
   const [minScore, setMinScore] = useState('');
   const [maxScore, setMaxScore] = useState('');
   const [cwe, setCwe] = useState('');
-  const [sort, setSort] = useState<VulnerabilityFilters['sort']>('cvss_score');
+  const [sort, setSort] = useState<VulnerabilityFilters['sort']>('severity');
   const [order, setOrder] = useState<VulnerabilityFilters['order']>('desc');
   const [data, setData] = useState<PaginatedResponse<Vulnerability> | null>(null);
   const [selectedCve, setSelectedCve] = useState<Vulnerability | null>(null);
@@ -76,6 +76,8 @@ export default function Explorer() {
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
   const [, startTransition] = useTransition();
+  const requestId = useRef(0);
+  const tableRef = useRef<HTMLDivElement>(null);
 
   const currentFilters = (): VulnerabilityFilters => ({
     q: query.trim(),
@@ -90,6 +92,7 @@ export default function Explorer() {
   });
 
   const loadVulnerabilities = () => {
+    const currentRequest = ++requestId.current;
     setLoading(true);
     setError('');
 
@@ -111,14 +114,15 @@ export default function Explorer() {
 
     api<PaginatedResponse<Vulnerability>>(`/vulnerabilities?${params.toString()}`)
       .then(res => {
-        setData(res);
+        if (currentRequest === requestId.current) setData(res);
       })
       .catch((err: Error) => {
+        if (currentRequest !== requestId.current) return;
         setError(err.message || 'Failed to fetch vulnerabilities');
         showToast('Error loading vulnerabilities', 'error');
       })
       .finally(() => {
-        setLoading(false);
+        if (currentRequest === requestId.current) setLoading(false);
       });
   };
 
@@ -171,8 +175,14 @@ export default function Explorer() {
 
   const resetFilters = () => {
     setQuery(''); setSeverity(''); setFromDate(''); setToDate('');
-    setMinScore(''); setMaxScore(''); setCwe(''); setSort('cvss_score'); setOrder('desc'); setPage(1);
+    setMinScore(''); setMaxScore(''); setCwe(''); setSort('severity'); setOrder('desc'); setPage(1);
   };
+
+  useEffect(() => {
+    if (!loading && data?.page === page && page > 1) {
+      tableRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+    }
+  }, [data?.page, loading, page]);
 
   return (
     <div className="explorer-container animate-fade-in">
@@ -244,6 +254,7 @@ export default function Explorer() {
               >
                 <option value="published-desc">Newest Published</option>
                 <option value="published-asc">Oldest Published</option>
+                <option value="severity-desc">Highest severity (Critical first)</option>
                 <option value="cvss_score-desc">Highest CVSS (10.0 first)</option>
                 <option value="cvss_score-asc">Lowest CVSS (0.0 first)</option>
                 <option value="priority_score-desc">Highest Priority Risk</option>
@@ -291,7 +302,7 @@ export default function Explorer() {
           <label>CVSS minimum<input type="number" min="0" max="10" step="0.1" placeholder="0.0" value={minScore} onChange={e => { setPage(1); setMinScore(e.target.value); }} /></label>
           <label>CVSS maximum<input type="number" min="0" max="10" step="0.1" placeholder="10.0" value={maxScore} onChange={e => { setPage(1); setMaxScore(e.target.value); }} /></label>
           <label>CWE<input type="search" maxLength={100} placeholder="e.g. CWE-79" value={cwe} onChange={e => { setPage(1); setCwe(e.target.value); }} /></label>
-          <label>Sort by<select value={sort} onChange={e => { setPage(1); setSort(e.target.value as VulnerabilityFilters['sort']); }}><option value="published">Published date</option><option value="cvss_score">Source CVSS score</option><option value="priority_score">Priority score</option><option value="cve_id">CVE ID</option></select></label>
+          <label>Sort by<select value={sort} onChange={e => { setPage(1); setSort(e.target.value as VulnerabilityFilters['sort']); }}><option value="severity">Severity (Critical first)</option><option value="published">Published date</option><option value="cvss_score">Source CVSS score</option><option value="priority_score">Priority score</option><option value="cve_id">CVE ID</option></select></label>
           <label>Order<select value={order} onChange={e => { setPage(1); setOrder(e.target.value as VulnerabilityFilters['order']); }}><option value="desc">Descending</option><option value="asc">Ascending</option></select></label>
           <button className="button-secondary explorer-reset" onClick={resetFilters}>Reset filters</button>
         </div>
@@ -322,12 +333,12 @@ export default function Explorer() {
         </div>
 
         {/* Informative notice when sorting by CVSS desc with all severities */}
-        {sort === 'cvss_score' && order === 'desc' && !severity && (
+        {sort === 'severity' && order === 'desc' && !severity && (
           <div className="notice blue-notice" style={{ margin: '8px 0 16px', padding: '10px 14px' }}>
             <Info size={15} />
             <div>
               <span>
-                Sorted by <b>highest source CVSS score</b>, which places Critical records first, followed by High, Medium, and Low. Records without a source score remain marked unscored; use the severity pills to narrow the list.
+                Sorted by <b>severity level</b>: Critical, High, Medium, Low, None, then unscored. Records within each severity are ordered by publication date, so the list doesn’t spend hundreds of pages on tied 10.0 scores.
               </span>
             </div>
           </div>
@@ -340,8 +351,8 @@ export default function Explorer() {
           <Loading />
         ) : (
           <>
-            <div className="table-wrap">
-              <table className="explorer-table">
+            <div className="table-wrap" ref={tableRef}>
+              <table className="explorer-table" aria-busy={loading}>
                 <thead>
                   <tr>
                     <th
@@ -354,7 +365,16 @@ export default function Explorer() {
                         {renderSortIcon('cve_id')}
                       </div>
                     </th>
-                    <th>SOURCE SEVERITY</th>
+                    <th
+                      className="sortable-th"
+                      onClick={() => handleSortClick('severity')}
+                      title="Click to rank by severity level"
+                    >
+                      <div className="th-content">
+                        <span>SOURCE SEVERITY</span>
+                        {renderSortIcon('severity')}
+                      </div>
+                    </th>
                     <th
                       className="sortable-th"
                       onClick={() => handleSortClick('cvss_score')}
@@ -469,23 +489,25 @@ export default function Explorer() {
             {/* Pagination Controls */}
             {data && data.pages > 1 && (
               <div className="pagination">
-                <span className="page-info">
-                  Showing page <b>{data.page}</b> of <b>{data.pages}</b> ({data.total.toLocaleString()} total entries)
+                <span className="page-info" aria-live="polite">
+                  {loading || data.page !== page
+                    ? <>Loading page <b>{page}</b> of <b>{data.pages}</b>…</>
+                    : <>Showing page <b>{data.page}</b> of <b>{data.pages}</b> ({data.total.toLocaleString()} total entries)</>}
                 </span>
                 <div className="pagination-buttons">
                   <button
                     className="button-secondary"
-                    disabled={page <= 1}
+                    disabled={loading || page !== data.page || page <= 1}
                     onClick={() => setPage(p => Math.max(1, p - 1))}
                   >
                     <ChevronLeft size={16} /> Previous
                   </button>
                   <span className="page-indicator">
-                    {page} / {data.pages}
+                    {data.page} / {data.pages}
                   </span>
                   <button
                     className="button-secondary"
-                    disabled={page >= data.pages}
+                    disabled={loading || page !== data.page || page >= data.pages}
                     onClick={() => setPage(p => Math.min(data.pages, p + 1))}
                   >
                     Next <ChevronRight size={16} />

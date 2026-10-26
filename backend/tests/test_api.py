@@ -293,6 +293,13 @@ class TestVulnerabilities:
         assert "total" in data
         assert data["per_page"] == 20
 
+    def test_next_page_returns_a_distinct_page_in_severity_order(self, client):
+        first = client.get("/api/vulnerabilities?sort=severity&per_page=1&page=1").get_json()
+        second = client.get("/api/vulnerabilities?sort=severity&per_page=1&page=2").get_json()
+        assert first["page"] == 1
+        assert second["page"] == 2
+        assert first["items"][0]["cve_id"] != second["items"][0]["cve_id"]
+
     def test_invalid_severity(self, client):
         r = client.get("/api/vulnerabilities?severity=SEVERE")
         assert r.status_code == 400

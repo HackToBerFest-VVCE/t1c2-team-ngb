@@ -28,7 +28,7 @@ TABLE_RE = re.compile(
 
 # ── Process-level cache for fully normalised records ──────────────────
 _RECORDS_CACHE: tuple[float, int, int, pd.DataFrame] | None = None
-_RECORDS_TTL = 60  # seconds
+_RECORDS_TTL = 300  # seconds; keep the live catalog warm while analysts paginate
 _SNOWFLAKE_LAST_REFRESH: str | None = None
 _RECORDS_LOCK = RLock()
 
@@ -242,6 +242,49 @@ class SnowflakeProvider:
             raise
         except Exception as exc:
             raise ProviderError("Snowflake Cortex is currently unavailable") from exc
+        finally:
+            conn.close()
+
+    def page_records(self, page: int, per_page: int, sort: str, order: str) -> tuple[pd.DataFrame, int]:
+        """Fetch one unfiltered catalog page from Snowflake without downloading the full table."""
+        table = self._config()["SNOWFLAKE_TABLE"]
+        order_by = {
+            "severity": (
+                "CASE UPPER(COALESCE(SEVERITY, '')) "
+                "WHEN 'CRITICAL' THEN 0 WHEN 'HIGH' THEN 1 "
+                "WHEN 'MEDIUM' THEN 2 WHEN 'LOW' THEN 3 "
+                f"WHEN 'NONE' THEN 4 WHEN 'UNKNOWN' THEN 5 ELSE 6 END {'ASC' if order == 'desc' else 'DESC'}, "
+                "PUBLISHED DESC NULLS LAST, CVSS_SCORE DESC NULLS LAST, CVE_ID ASC"
+            ),
+            "cvss_score": f"CVSS_SCORE {'ASC' if order == 'asc' else 'DESC'} NULLS LAST, PUBLISHED DESC NULLS LAST, CVE_ID ASC",
+            "published": f"PUBLISHED {'ASC' if order == 'asc' else 'DESC'} NULLS LAST, CVE_ID ASC",
+            "cve_id": f"CVE_ID {'ASC' if order == 'asc' else 'DESC'}",
+            "priority_score": f"CVSS_SCORE {'ASC' if order == 'asc' else 'DESC'} NULLS LAST, PUBLISHED DESC NULLS LAST, CVE_ID ASC",
+        }[sort]
+        columns = (
+            "CVE_ID, DESCRIPTION, PUBLISHED, LAST_MODIFIED, CVSS_SCORE, "
+            "SEVERITY, CWE, AFFECTED_PRODUCTS, SOURCE_URL"
+        )
+        offset = (page - 1) * per_page
+        conn = self._connection()
+        try:
+            cur = conn.cursor()
+            try:
+                visible = "COALESCE(DESCRIPTION, '') NOT ILIKE 'Rejected reason:%'"
+                cur.execute(f"SELECT COUNT(*) FROM {table} WHERE {visible}")
+                total = int(cur.fetchone()[0])
+                cur.execute(
+                    f"SELECT {columns} FROM {table} WHERE {visible} ORDER BY {order_by} LIMIT %s OFFSET %s",
+                    (per_page, offset),
+                )
+                names = [item[0].lower() for item in cur.description]
+                return pd.DataFrame(cur.fetchall(), columns=names), total
+            finally:
+                cur.close()
+        except ProviderError:
+            raise
+        except Exception as exc:
+            raise ProviderError("Could not query a page from the configured Snowflake table") from exc
         finally:
             conn.close()
 
