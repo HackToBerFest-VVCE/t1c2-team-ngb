@@ -217,6 +217,16 @@ class TestHealthEndpoint:
         assert data["source"]["mode"] in ("DEMO", "LIVE")
 
 
+class TestOverviewSummary:
+    def test_recent_records_are_ranked_by_cvss_with_unscored_last(self, client):
+        response = client.get("/api/summary")
+        assert response.status_code == 200
+        scores = [row["cvss_score"] for row in response.get_json()["recent"]]
+        scored = [score for score in scores if score is not None]
+        assert scored == sorted(scored, reverse=True)
+        assert scores == scored + [None] * (len(scores) - len(scored))
+
+
 class TestDataSources:
     def test_returns_active_and_available(self, client):
         r = client.get("/api/data-sources")

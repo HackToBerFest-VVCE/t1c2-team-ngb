@@ -341,8 +341,8 @@ export default function Overview({ source, onSelect }: OverviewProps) {
       <div className="lower-grid">
         {/* Recent Vulnerabilities Table */}
         <Card
-          title="Recent vulnerabilities"
-          subtitle="Latest records indexed from active source"
+          title="Highest severity vulnerabilities"
+          subtitle="Ranked by source CVSS Base Score; unscored records follow"
           action={
             <button
               className="text-action"
@@ -386,7 +386,9 @@ export default function Overview({ source, onSelect }: OverviewProps) {
                       <SeverityBadge severity={v.severity} />
                     </td>
                     <td>
-                      <span className="mono-score">{v.cvss_score?.toFixed(1) ?? '—'}</span>
+                      <span className="mono-score" title={v.cvss_score != null ? 'Source-provided CVSS Base Score' : 'No CVSS score is present in the source record'}>
+                        {v.cvss_score?.toFixed(1) ?? 'Unscored'}
+                      </span>
                     </td>
                     <td title={v.published ? `Full UTC Timestamp: ${v.published}` : undefined}>
                       {v.published ? (

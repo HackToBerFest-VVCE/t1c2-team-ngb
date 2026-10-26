@@ -265,7 +265,14 @@ def summary():
         return jsonify(_SUMMARY_CACHE[2])
 
     m = metrics(frame)
-    recent = frame.sort_values("published", ascending=False, na_position="last").head(6)
+    # Overview should surface the most severe source-scored records first.
+    # Missing CVSS values remain last and are never inferred or fabricated.
+    recent = frame.sort_values(
+        ["cvss_score", "published"],
+        ascending=[False, False],
+        na_position="last",
+        kind="mergesort",
+    ).head(6)
     payload = {
         "metrics": m,
         "recent": _public_rows(recent),
