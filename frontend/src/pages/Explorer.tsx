@@ -68,7 +68,7 @@ export default function Explorer() {
   const [minScore, setMinScore] = useState('');
   const [maxScore, setMaxScore] = useState('');
   const [cwe, setCwe] = useState('');
-  const [sort, setSort] = useState<VulnerabilityFilters['sort']>('published');
+  const [sort, setSort] = useState<VulnerabilityFilters['sort']>('cvss_score');
   const [order, setOrder] = useState<VulnerabilityFilters['order']>('desc');
   const [data, setData] = useState<PaginatedResponse<Vulnerability> | null>(null);
   const [selectedCve, setSelectedCve] = useState<Vulnerability | null>(null);
@@ -171,7 +171,7 @@ export default function Explorer() {
 
   const resetFilters = () => {
     setQuery(''); setSeverity(''); setFromDate(''); setToDate('');
-    setMinScore(''); setMaxScore(''); setCwe(''); setSort('published'); setOrder('desc'); setPage(1);
+    setMinScore(''); setMaxScore(''); setCwe(''); setSort('cvss_score'); setOrder('desc'); setPage(1);
   };
 
   return (
@@ -180,7 +180,7 @@ export default function Explorer() {
       <PageHeading
         eyebrow="SOURCE RECORDS"
         title="Vulnerability Explorer"
-        description="Explore NVD records ranked by source CVSS Base Score, with clear unscored status and direct evidence links."
+        description="Rank vulnerabilities from Critical to Low by NVD CVSS severity, with unscored records clearly identified."
         action={
           <div className="button-group">
             <button
@@ -204,7 +204,7 @@ export default function Explorer() {
       {/* ── Main Explorer Card ────────────────────────────────────── */}
       <Card
         title="Record catalog"
-        subtitle="Filter by CVE, source severity, CVSS Base Score, publication date, or weakness class"
+        subtitle="Rank by source severity and CVSS score, then filter by CVE, date, or weakness class"
       >
         {/* Search & Filter Toolbar */}
         <div className="filter-toolbar">
@@ -327,7 +327,7 @@ export default function Explorer() {
             <Info size={15} />
             <div>
               <span>
-                Sorted by <b>Highest CVSS Base Score (10.0 first)</b>. The catalog contains 38,000+ Critical vulnerabilities with CVSS 10.0. Click the column headers or select a severity pill (High, Medium, Low) to explore other score tiers.
+                Sorted by <b>highest source CVSS score</b>, which places Critical records first, followed by High, Medium, and Low. Records without a source score remain marked unscored; use the severity pills to narrow the list.
               </span>
             </div>
           </div>
@@ -411,7 +411,16 @@ export default function Explorer() {
                               </span>
                             )}
                           </div>
-                        ) : <span className="unscored-value">Not scored</span>}
+                        ) : (
+                          <div className="score-cell">
+                            <span className="unscored-value">Not scored by NVD</span>
+                            {v.priority_score != null && (
+                              <span className="priority-pill" title="Local triage priority (0–100), based on publication recency because the source has no CVSS score.">
+                                P{Math.round(v.priority_score)}
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </td>
                       <td className="date-cell" title={v.published ? `Full source timestamp: ${v.published}` : undefined}>
                         {v.published ? (
@@ -527,6 +536,11 @@ export default function Explorer() {
               {selectedCve.cvss_score != null && (
                 <Badge tone="gray">
                   CVSS Base: <b>{selectedCve.cvss_score.toFixed(1)}</b>
+                </Badge>
+              )}
+              {selectedCve.priority_score != null && (
+                <Badge tone="gray" title="Local triage priority score (0–100), not an NVD CVSS score.">
+                  Priority: <b>{Math.round(selectedCve.priority_score)} / 100</b>
                 </Badge>
               )}
             </div>

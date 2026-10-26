@@ -33,7 +33,7 @@ vi.mock('../api', () => ({
         items: [{ month: '2026-01', CRITICAL: 10, HIGH: 20, MEDIUM: 15, LOW: 5, UNKNOWN: 0 }],
       });
     }
-    if (path === '/risk-analysis') {
+    if (path.startsWith('/risk-analysis')) {
       return Promise.resolve({
         method: {
           name: 'NVD CVSS Base Score',
@@ -170,12 +170,13 @@ describe('Analysis Pages', () => {
     });
   });
 
-  it('renders CVSS analysis and source-score coverage', async () => {
+  it('renders CVSS analysis with the source severity and score', async () => {
     render(<Risk />);
     expect(screen.getByText('CVSS Analysis')).toBeInTheDocument();
     await waitFor(() => {
       expect(screen.getByText('CVE-2026-7777')).toBeInTheDocument();
-      expect(screen.getByText('Score coverage in this list')).toBeInTheDocument();
+      expect(screen.getByText('CRITICAL')).toBeInTheDocument();
+      expect(screen.getAllByText('9.9', { exact: false }).length).toBeGreaterThan(0);
     });
   });
 
