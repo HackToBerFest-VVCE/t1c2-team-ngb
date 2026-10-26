@@ -314,7 +314,7 @@ def vulnerabilities():
         if mode() == "snowflake" and not has_filters:
             provider = get_provider()
             page_reader = getattr(provider, "page_records", None)
-            if page_reader:
+            if page_reader and sort != "priority_score":
                 page_frame, total = page_reader(page, per, sort, order)
                 if not page_frame.empty:
                     page_frame["published"] = pd.to_datetime(page_frame["published"], errors="coerce", utc=True)

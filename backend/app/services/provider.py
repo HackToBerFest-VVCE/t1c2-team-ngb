@@ -270,7 +270,9 @@ class SnowflakeProvider:
         try:
             cur = conn.cursor()
             try:
-                visible = "COALESCE(DESCRIPTION, '') NOT ILIKE 'Rejected reason:%'"
+                # Escape `%` for the connector's pyformat parameter binding;
+                # Snowflake receives a single SQL wildcard after binding.
+                visible = "COALESCE(DESCRIPTION, '') NOT ILIKE 'Rejected reason:%%'"
                 cur.execute(f"SELECT COUNT(*) FROM {table} WHERE {visible}")
                 total = int(cur.fetchone()[0])
                 cur.execute(
