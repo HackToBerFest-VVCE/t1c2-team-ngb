@@ -1228,14 +1228,19 @@ export function DataExplorer({ source }: { source?: SourceStatus }) {
                           <div className="completeness-bar-wrap">
                             <div className="completeness-bar">
                               <span
+                                role="progressbar"
+                                aria-label={`${f.name} data completeness`}
+                                aria-valuemin={0}
+                                aria-valuemax={100}
+                                aria-valuenow={completeness}
                                 style={{
                                   width: `${completeness}%`,
                                   background:
                                     completeness > 90
-                                      ? 'var(--green)'
+                                      ? 'var(--accent-green)'
                                       : completeness > 60
-                                      ? 'var(--amber)'
-                                      : 'var(--red)',
+                                      ? 'var(--accent-amber)'
+                                      : 'var(--accent-red)',
                                 }}
                               />
                             </div>

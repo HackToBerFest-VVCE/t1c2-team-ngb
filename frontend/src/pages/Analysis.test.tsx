@@ -196,6 +196,11 @@ describe('Analysis Pages', () => {
       expect(screen.getByText('CANONICAL SCHEMA FIELDS')).toBeInTheDocument();
       expect(screen.getByText('CVE_ID')).toBeInTheDocument();
     });
+    const completenessMarker = await screen.findByRole('progressbar', {
+      name: 'CVE_ID data completeness',
+    });
+    expect(completenessMarker).toHaveAttribute('aria-valuenow', '100');
+    expect(completenessMarker).toHaveStyle({ width: '100%' });
   });
 
   it('renders Reports briefing and download buttons', async () => {
