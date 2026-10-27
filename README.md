@@ -24,7 +24,7 @@ ThreatLens AI is Team Nova's flagship open-source cybersecurity implementation: 
 
 ## Architecture
 
-![Halloween-themed ThreatLens AI system architecture](docs/architecture.svg)
+![ThreatLens AI architecture diagram for Team NGB](docs/architecture.png)
 
 See the [architecture notes](docs/architecture.md). CoCo supports the human development workflow only; it is not in the running application's analytical path.
 
