@@ -22,4 +22,4 @@ CoCo usage and shared resource allocation are not represented as runtime capabil
 
 ## Shareable asset
 
-The high-resolution [architecture PNG](architecture.png) is ready to share, and its [SVG source](architecture.svg) is available for editing. The Halloween styling follows the supplied reference while the labels and flows are grounded in this repository.
+The [architecture PNG](architecture.png) is the supplied Team NGB diagram. The [SVG preview](architecture.svg) embeds the same image for README and browser rendering.
