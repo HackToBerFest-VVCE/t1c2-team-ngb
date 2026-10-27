@@ -56,6 +56,87 @@ const SEVERITY_COLORS: Record<string, string> = {
 
 const FALLBACK_PALETTE = ['#f27885', '#f5aa64', '#e6ce79', '#6cdbb0', '#68758a', '#8b5cf6'];
 
+function LightDonutTooltip({ active, payload, total }: any) {
+  if (active && payload && payload.length) {
+    const data = payload[0];
+    const name = String(data.name || data.payload?.name || 'Severity');
+    const val = Number(data.value || 0);
+    const color =
+      SEVERITY_COLORS[name.toUpperCase()] ??
+      FALLBACK_PALETTE[0];
+    const tot = total > 0 ? total : 1;
+    const pct = ((val / tot) * 100).toFixed(1);
+
+    return (
+      <div
+        style={{
+          background: '#ffffff',
+          color: '#0f172a',
+          border: '1px solid #cbd5e1',
+          borderRadius: '8px',
+          padding: '8px 12px',
+          boxShadow: '0 12px 28px rgba(0, 0, 0, 0.35), 0 4px 8px rgba(0, 0, 0, 0.12)',
+          fontSize: '12px',
+          lineHeight: 1.4,
+          minWidth: '135px',
+          pointerEvents: 'none',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '5px' }}>
+          <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: color, display: 'inline-block' }} />
+          <strong style={{ fontSize: '12px', color: '#0f172a', fontWeight: 700, letterSpacing: '0.3px' }}>
+            {name}
+          </strong>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', color: '#475569', fontSize: '11px' }}>
+          <span>Count:</span>
+          <strong style={{ color: '#0f172a', fontWeight: 700, fontFamily: 'var(--font-mono, monospace)', fontSize: '12px' }}>
+            {val.toLocaleString()}
+          </strong>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', color: '#64748b', fontSize: '11px', marginTop: '2px' }}>
+          <span>Share:</span>
+          <span style={{ fontWeight: 600, color: '#2563eb', fontFamily: 'var(--font-mono, monospace)' }}>{pct}%</span>
+        </div>
+      </div>
+    );
+  }
+  return null;
+}
+
+function LightAreaTooltip({ active, payload, label }: any) {
+  if (active && payload && payload.length) {
+    const val = Number(payload[0].value || 0);
+    return (
+      <div
+        style={{
+          background: '#ffffff',
+          color: '#0f172a',
+          border: '1px solid #cbd5e1',
+          borderRadius: '8px',
+          padding: '8px 12px',
+          boxShadow: '0 12px 28px rgba(0, 0, 0, 0.35), 0 4px 8px rgba(0, 0, 0, 0.12)',
+          fontSize: '12px',
+          lineHeight: 1.4,
+          minWidth: '125px',
+          pointerEvents: 'none',
+        }}
+      >
+        <div style={{ fontSize: '11px', fontWeight: 600, color: '#64748b', marginBottom: '3px' }}>
+          {label}
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
+          <span style={{ color: '#475569', fontSize: '11px' }}>Published:</span>
+          <strong style={{ color: '#2563eb', fontWeight: 700, fontFamily: 'var(--font-mono, monospace)' }}>
+            {val.toLocaleString()} CVEs
+          </strong>
+        </div>
+      </div>
+    );
+  }
+  return null;
+}
+
 interface OverviewProps {
   source?: SourceStatus;
   onSelect: (page: string) => void;
@@ -312,18 +393,7 @@ export default function Overview({ source, onSelect }: OverviewProps) {
                   axisLine={false}
                   tickLine={false}
                 />
-                <Tooltip
-                  contentStyle={{
-                    background: '#151c28',
-                    border: '1px solid #2a3545',
-                    borderRadius: 8,
-                    boxShadow: '0 8px 24px rgba(0, 0, 0, 0.4)',
-                    color: '#e7ebf3',
-                    fontSize: 12,
-                  }}
-                  formatter={(value: any) => [`${Number(value).toLocaleString()} CVEs`, 'Published']}
-                  labelStyle={{ color: '#93a2b8', fontWeight: 600, marginBottom: 4 }}
-                />
+                <Tooltip content={<LightAreaTooltip />} />
                 <Area
                   type="monotone"
                   dataKey="count"
@@ -363,19 +433,7 @@ export default function Overview({ source, onSelect }: OverviewProps) {
                       return <Cell key={`cell-${index}`} fill={color} />;
                     })}
                   </Pie>
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#151c28',
-                      border: '1px solid #2a3545',
-                      borderRadius: 8,
-                      color: '#e7ebf3',
-                      fontSize: 12,
-                      padding: '8px 10px',
-                    }}
-                    itemStyle={{ color: '#e7ebf3', fontWeight: 600 }}
-                    labelStyle={{ color: '#aebbd0' }}
-                    formatter={(val: any) => [Number(val).toLocaleString(), 'Count']}
-                  />
+                  <Tooltip content={<LightDonutTooltip total={metrics.total} />} />
                 </PieChart>
               </ResponsiveContainer>
               <div className="donut-label">

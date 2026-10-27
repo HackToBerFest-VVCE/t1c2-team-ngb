@@ -241,13 +241,15 @@ export function Trends() {
                   />
                   <Tooltip
                     contentStyle={{
-                      background: '#151c28',
-                      border: '1px solid #2a3545',
+                      background: '#ffffff',
+                      border: '1px solid #cbd5e1',
                       borderRadius: 8,
-                      boxShadow: '0 8px 24px rgba(0, 0, 0, 0.4)',
-                      color: '#e7ebf3',
+                      boxShadow: '0 12px 28px rgba(0, 0, 0, 0.35), 0 4px 8px rgba(0, 0, 0, 0.12)',
+                      color: '#0f172a',
                       fontSize: 12,
                     }}
+                    itemStyle={{ color: '#0f172a', fontWeight: 600 }}
+                    labelStyle={{ color: '#64748b', fontWeight: 600, marginBottom: 4 }}
                     cursor={{ fill: 'rgba(255, 255, 255, 0.04)' }}
                   />
                   <Legend
