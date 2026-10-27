@@ -33,7 +33,6 @@ import {
   FileCheck,
   AlertCircle,
   Package,
-  Check,
   ArrowRight,
   Bot,
   User,
@@ -229,43 +228,33 @@ Verified Fixed Version: ${assessment.verified_fixed_version || 'None specified'}
   };
 
   // Verdict style mapper
-  const getVerdictBadge = (verdict: string) => {
+  const getVerdictStyleClass = (verdict: string) => {
     switch (verdict) {
       case 'KNOWN_VULNERABILITIES_FOUND':
-        return {
-          bg: 'bg-rose-500/10 border-rose-500/30 text-rose-300',
-          badgeBg: 'bg-rose-500/20 text-rose-300 border border-rose-500/40',
-          icon: <ShieldAlert className="w-6 h-6 text-rose-400" />,
-          title: 'Known Vulnerabilities Confirmed',
-        };
+        return 'known-vulns';
       case 'POTENTIAL_MATCH_REQUIRES_VERIFICATION':
-        return {
-          bg: 'bg-amber-500/10 border-amber-500/30 text-amber-300',
-          badgeBg: 'bg-amber-500/20 text-amber-300 border border-amber-500/40',
-          icon: <AlertTriangle className="w-6 h-6 text-amber-400" />,
-          title: 'Potential Match (Requires Build Verification)',
-        };
+        return 'potential';
       case 'NO_MATCHING_VULNERABILITIES_FOUND':
-        return {
-          bg: 'bg-sky-500/10 border-sky-500/30 text-sky-300',
-          badgeBg: 'bg-sky-500/20 text-sky-300 border border-sky-500/40',
-          icon: <ShieldCheck className="w-6 h-6 text-sky-400" />,
-          title: 'No Matching Vulnerabilities in Queried Databases',
-        };
+        return 'no-match';
       case 'SUSPICIOUS_INDICATORS_FOUND':
-        return {
-          bg: 'bg-purple-500/10 border-purple-500/30 text-purple-300',
-          badgeBg: 'bg-purple-500/20 text-purple-300 border border-purple-500/40',
-          icon: <AlertCircle className="w-6 h-6 text-purple-400" />,
-          title: 'Suspicious Security Indicators Detected',
-        };
+        return 'suspicious';
       default:
-        return {
-          bg: 'bg-slate-500/10 border-slate-500/30 text-slate-300',
-          badgeBg: 'bg-slate-500/20 text-slate-300 border border-slate-500/40',
-          icon: <Info className="w-6 h-6 text-slate-400" />,
-          title: 'Inconclusive / Insufficient Details',
-        };
+        return 'potential';
+    }
+  };
+
+  const getVerdictIcon = (verdict: string) => {
+    switch (verdict) {
+      case 'KNOWN_VULNERABILITIES_FOUND':
+        return <ShieldAlert size={28} color="#f27885" />;
+      case 'POTENTIAL_MATCH_REQUIRES_VERIFICATION':
+        return <AlertTriangle size={28} color="#f5aa64" />;
+      case 'NO_MATCHING_VULNERABILITIES_FOUND':
+        return <ShieldCheck size={28} color="#5cc8e4" />;
+      case 'SUSPICIOUS_INDICATORS_FOUND':
+        return <AlertCircle size={28} color="#a18aff" />;
+      default:
+        return <Info size={28} color="#8491a5" />;
     }
   };
 
@@ -281,32 +270,28 @@ Verified Fixed Version: ${assessment.verified_fixed_version || 'None specified'}
   });
 
   return (
-    <div className="space-y-8 max-w-[1440px] mx-auto pb-16">
+    <div className="advisor-container">
       {/* ── Page Header ── */}
       <PageHeading
         title="Software Safety Advisor"
         description="Evidence-based software vulnerability and risk assessment powered by Snowflake CVE dataset, OSV.dev, and DeepSeek/NVIDIA AI."
-        eyebrow="Evidence-Linked Security"
+        eyebrow="EVIDENCE-LINKED SECURITY"
       />
 
-      {/* ── Main Assessment Card ── */}
-      <div className="rounded-2xl border border-slate-800/80 bg-gradient-to-b from-slate-900/90 to-slate-950 p-6 md:p-8 shadow-xl shadow-black/40 backdrop-blur-md">
+      {/* ── Main Assessment Form Card ── */}
+      <div className="advisor-card">
         {/* Mode Switcher Tabs */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 pb-6 border-b border-slate-800/80">
-          <div className="inline-flex p-1.5 bg-slate-950/80 border border-slate-800/90 rounded-xl shadow-inner gap-1.5">
+        <div className="advisor-tabs-bar">
+          <div className="advisor-tab-group">
             <button
               type="button"
               onClick={() => {
                 setActiveTab('software');
                 setEcosystem('generic');
               }}
-              className={`flex items-center justify-center gap-2.5 px-4 py-2.5 text-xs font-semibold rounded-lg transition-all ${
-                activeTab === 'software'
-                  ? 'bg-gradient-to-r from-sky-600 to-blue-600 text-white shadow-md shadow-sky-950'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
-              }`}
+              className={`advisor-tab-btn ${activeTab === 'software' ? 'active' : ''}`}
             >
-              <Cpu className="w-4 h-4" />
+              <Cpu size={16} />
               Software & Version (Mode A)
             </button>
 
@@ -316,63 +301,53 @@ Verified Fixed Version: ${assessment.verified_fixed_version || 'None specified'}
                 setActiveTab('package');
                 if (ecosystem === 'generic') setEcosystem('pypi');
               }}
-              className={`flex items-center justify-center gap-2.5 px-4 py-2.5 text-xs font-semibold rounded-lg transition-all ${
-                activeTab === 'package'
-                  ? 'bg-gradient-to-r from-sky-600 to-blue-600 text-white shadow-md shadow-sky-950'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
-              }`}
+              className={`advisor-tab-btn ${activeTab === 'package' ? 'active' : ''}`}
             >
-              <Layers className="w-4 h-4" />
+              <Layers size={16} />
               Package Ecosystem (Mode B)
             </button>
 
             <button
               type="button"
               onClick={() => setActiveTab('file')}
-              className={`flex items-center justify-center gap-2.5 px-4 py-2.5 text-xs font-semibold rounded-lg transition-all ${
-                activeTab === 'file'
-                  ? 'bg-gradient-to-r from-sky-600 to-blue-600 text-white shadow-md shadow-sky-950'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
-              }`}
+              className={`advisor-tab-btn ${activeTab === 'file' ? 'active' : ''}`}
             >
-              <Upload className="w-4 h-4" />
+              <Upload size={16} />
               URL & Safe File (Mode C)
             </button>
           </div>
 
-          <div className="flex items-center gap-2 text-xs text-slate-400">
-            <Zap className="w-3.5 h-3.5 text-amber-400" />
+          <div className="advisor-pill-note">
+            <Zap size={14} color="#f5aa64" />
             <span>Deterministic SemVer matching + Real-time CVE intelligence</span>
           </div>
         </div>
 
         {/* Quick Presets Bar */}
-        <div className="flex flex-wrap items-center gap-2.5 py-4 my-2">
-          <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 mr-1 flex items-center gap-1.5">
-            <Sparkles className="w-3.5 h-3.5 text-sky-400" />
+        <div className="advisor-presets-bar">
+          <div className="advisor-preset-label">
+            <Sparkles size={14} color="#6b8cff" />
             Quick Presets:
-          </span>
+          </div>
           {PRESET_EXAMPLES.map((ex, idx) => (
             <button
               key={idx}
               type="button"
               onClick={() => handleQuickPreset(ex)}
-              className="px-3.5 py-1.5 rounded-lg text-xs font-medium bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 hover:text-white border border-slate-700/60 hover:border-sky-500/50 transition-all flex items-center gap-2 shadow-sm cursor-pointer"
+              className="advisor-preset-chip"
             >
               <span>{ex.label}</span>
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-900/90 text-sky-300 font-mono">
-                {ex.tag}
-              </span>
+              <span className="advisor-preset-tag">{ex.tag}</span>
             </button>
           ))}
         </div>
 
-        {/* Input Form */}
-        <form onSubmit={handleRunAssessment} className="space-y-6 pt-2">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* Assessment Input Form */}
+        <form onSubmit={handleRunAssessment}>
+          <div className="advisor-form-grid">
             {/* Field 1: Software/Package Name */}
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">
+            <div className="advisor-field-group">
+              <label className="advisor-label">
                 {activeTab === 'package' ? 'Package Identifier *' : 'Software / Application Name *'}
               </label>
               <input
@@ -380,43 +355,45 @@ Verified Fixed Version: ${assessment.verified_fixed_version || 'None specified'}
                 value={productName}
                 onChange={e => setProductName(e.target.value)}
                 placeholder={activeTab === 'package' ? 'e.g. cryptography, express, log4j-core' : 'e.g. OpenSSL, Apache HTTP Server'}
-                className="w-full h-12 px-4 bg-slate-950/70 border border-slate-800 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 transition-all"
+                className="advisor-input"
               />
-              <span className="text-[11px] text-slate-500 mt-1.5 block">
+              <span className="advisor-hint">
                 {activeTab === 'package' ? 'Official package registry name' : 'Application or library identifier'}
               </span>
             </div>
 
             {/* Field 2: Version */}
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">
-                Exact Version <span className="text-slate-500 font-normal lowercase">(recommended)</span>
+            <div className="advisor-field-group">
+              <label className="advisor-label">
+                <span>Exact Version</span>
+                <small>(recommended)</small>
               </label>
               <input
                 type="text"
                 value={version}
                 onChange={e => setVersion(e.target.value)}
                 placeholder="e.g. 3.0.0, 41.0.0, 2.14.1"
-                className="w-full h-12 px-4 bg-slate-950/70 border border-slate-800 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 transition-all"
+                className="advisor-input"
               />
-              <span className="text-[11px] text-slate-500 mt-1.5 block">
+              <span className="advisor-hint">
                 Required for accurate version range correlation
               </span>
             </div>
 
             {/* Field 3: Vendor / Publisher */}
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">
-                Vendor / Publisher <span className="text-slate-500 font-normal lowercase">(optional)</span>
+            <div className="advisor-field-group">
+              <label className="advisor-label">
+                <span>Vendor / Publisher</span>
+                <small>(optional)</small>
               </label>
               <input
                 type="text"
                 value={vendor}
                 onChange={e => setVendor(e.target.value)}
                 placeholder="e.g. Apache, Microsoft, PyCA"
-                className="w-full h-12 px-4 bg-slate-950/70 border border-slate-800 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 transition-all"
+                className="advisor-input"
               />
-              <span className="text-[11px] text-slate-500 mt-1.5 block">
+              <span className="advisor-hint">
                 Filters vendor-specific advisories
               </span>
             </div>
@@ -424,15 +401,15 @@ Verified Fixed Version: ${assessment.verified_fixed_version || 'None specified'}
 
           {/* Mode-Specific Sub-Rows */}
           {activeTab === 'package' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-800/60">
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">
+            <div className="advisor-form-grid two-col">
+              <div className="advisor-field-group">
+                <label className="advisor-label">
                   Package Ecosystem *
                 </label>
                 <select
                   value={ecosystem}
                   onChange={e => setEcosystem(e.target.value)}
-                  className="w-full h-12 px-4 bg-slate-950/70 border border-slate-800 rounded-xl text-sm text-slate-100 focus:outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 transition-all cursor-pointer"
+                  className="advisor-select"
                 >
                   {ECOSYSTEMS.filter(e => e.id !== 'generic').map(eco => (
                     <option key={eco.id} value={eco.id}>
@@ -440,22 +417,23 @@ Verified Fixed Version: ${assessment.verified_fixed_version || 'None specified'}
                     </option>
                   ))}
                 </select>
-                <span className="text-[11px] text-slate-500 mt-1.5 block">
+                <span className="advisor-hint">
                   Authoritative OSV.dev repository lookup target
                 </span>
               </div>
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">
-                  Package Source URL <span className="text-slate-500 font-normal lowercase">(optional registry link)</span>
+              <div className="advisor-field-group">
+                <label className="advisor-label">
+                  <span>Package Source URL</span>
+                  <small>(optional registry link)</small>
                 </label>
                 <input
                   type="url"
                   value={sourceUrl}
                   onChange={e => setSourceUrl(e.target.value)}
                   placeholder="https://pypi.org/project/cryptography/"
-                  className="w-full h-12 px-4 bg-slate-950/70 border border-slate-800 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 transition-all"
+                  className="advisor-input"
                 />
-                <span className="text-[11px] text-slate-500 mt-1.5 block">
+                <span className="advisor-hint">
                   Optional vendor verification reference
                 </span>
               </div>
@@ -463,61 +441,66 @@ Verified Fixed Version: ${assessment.verified_fixed_version || 'None specified'}
           )}
 
           {activeTab === 'file' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-800/60">
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">
-                  Software Download URL <span className="text-slate-500 font-normal lowercase">(anti-ssrf protected)</span>
+            <div className="advisor-form-grid two-col">
+              <div className="advisor-field-group">
+                <label className="advisor-label">
+                  <span>Software Download URL</span>
+                  <small>(anti-ssrf protected)</small>
                 </label>
                 <input
                   type="url"
                   value={sourceUrl}
                   onChange={e => setSourceUrl(e.target.value)}
                   placeholder="https://vendor.example/downloads/app.zip"
-                  className="w-full h-12 px-4 bg-slate-950/70 border border-slate-800 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 transition-all"
+                  className="advisor-input"
                 />
-                <p className="text-[11px] text-slate-500 mt-1.5">
+                <span className="advisor-hint">
                   Private networks, loopbacks (127.0.0.1), and cloud metadata endpoints are strictly blocked.
-                </p>
+                </span>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">
-                  Upload Package / Binary <span className="text-slate-500 font-normal lowercase">(max 15mb, static inspection only)</span>
+              <div className="advisor-field-group">
+                <label className="advisor-label">
+                  <span>Upload Package / Binary</span>
+                  <small>(max 15mb, static inspection only)</small>
                 </label>
-                <div className="flex items-center gap-3">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                   <input
                     type="file"
                     onChange={e => setSelectedFile(e.target.files?.[0] || null)}
-                    className="block w-full text-xs text-slate-400 file:mr-3 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-slate-800 file:text-slate-200 hover:file:bg-slate-700 cursor-pointer h-12 pt-2 bg-slate-950/70 border border-slate-800 rounded-xl px-2"
+                    className="advisor-input"
+                    style={{ paddingTop: '8px' }}
                   />
                   {selectedFile && (
                     <button
                       type="button"
                       onClick={() => setSelectedFile(null)}
-                      className="text-xs text-rose-400 hover:text-rose-300 px-3 py-2 rounded-lg bg-rose-500/10 border border-rose-500/20"
+                      className="button-secondary"
+                      style={{ color: '#f27885' }}
                     >
                       Clear
                     </button>
                   )}
                 </div>
-                <p className="text-[11px] text-slate-500 mt-1.5">
+                <span className="advisor-hint">
                   Binaries are never executed. SHA-256 and package structures are inspected in an isolated process.
-                </p>
+                </span>
               </div>
             </div>
           )}
 
-          {/* AI Provider and Action Row */}
-          <div className="pt-6 border-t border-slate-800/80 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                <Sparkles className="w-4 h-4 text-sky-400" />
+          {/* Action & Engine Bar */}
+          <div className="advisor-action-bar">
+            <div className="advisor-engine-select-wrap">
+              <span className="advisor-label" style={{ margin: 0, textTransform: 'none', fontSize: '12px' }}>
+                <Sparkles size={15} color="#6b8cff" style={{ marginRight: '6px' }} />
                 AI Analysis Engine:
               </span>
               <select
                 value={provider}
                 onChange={e => setProvider(e.target.value)}
-                className="h-11 px-4 bg-slate-950/80 border border-slate-800 rounded-xl text-xs font-medium text-slate-200 focus:outline-none focus:border-sky-500 cursor-pointer"
+                className="advisor-select"
+                style={{ height: '42px', minWidth: '240px' }}
               >
                 <option value="nvidia">NVIDIA NIM (Nemotron 3.5)</option>
                 <option value="deepseek">DeepSeek R1 (via NVIDIA NIM)</option>
@@ -529,16 +512,16 @@ Verified Fixed Version: ${assessment.verified_fixed_version || 'None specified'}
             <button
               type="submit"
               disabled={loading}
-              className="h-12 px-7 bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 disabled:from-slate-800 disabled:to-slate-800 disabled:text-slate-600 text-white font-semibold text-sm rounded-xl shadow-lg shadow-sky-950/50 flex items-center justify-center gap-2.5 transition-all transform hover:-translate-y-0.5 active:translate-y-0 cursor-pointer"
+              className="advisor-assess-btn"
             >
               {loading ? (
                 <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <RefreshCw size={17} className="animate-spin" />
                   Assessing Risk...
                 </>
               ) : (
                 <>
-                  <Shield className="w-4 h-4" />
+                  <Shield size={17} />
                   Assess Software Safety
                 </>
               )}
@@ -549,12 +532,12 @@ Verified Fixed Version: ${assessment.verified_fixed_version || 'None specified'}
 
       {/* ── Loading State ── */}
       {loading && (
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-12 text-center space-y-4">
+        <div className="advisor-card" style={{ textAlign: 'center', padding: '48px 24px' }}>
           <Loading />
-          <p className="text-base font-semibold text-slate-200">
+          <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#e6eaf2', marginTop: '16px' }}>
             Querying Snowflake vulnerability dataset and authoritative registries...
-          </p>
-          <p className="text-xs text-slate-400 max-w-lg mx-auto">
+          </h3>
+          <p style={{ fontSize: '12px', color: '#8491a5', maxWidth: '540px', margin: '8px auto 0' }}>
             Cross-referencing package ranges, verifying fixed releases, inspecting static indicators, and grounding assessment evidence.
           </p>
         </div>
@@ -562,130 +545,128 @@ Verified Fixed Version: ${assessment.verified_fixed_version || 'None specified'}
 
       {/* ── Assessment Results Dashboard ── */}
       {assessment && !loading && (
-        <div className="space-y-8 animate-in fade-in duration-300">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           {/* Executive Verdict Banner */}
-          {(() => {
-            const vStyle = getVerdictBadge(assessment.verdict);
-            return (
-              <div className={`p-6 md:p-8 rounded-2xl border ${vStyle.bg} flex flex-col md:flex-row items-start md:items-center justify-between gap-6 shadow-xl`}>
-                <div className="flex items-start gap-4">
-                  <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 shadow-md">
-                    {vStyle.icon}
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2.5">
-                      <span className={`text-xs px-2.5 py-1 rounded-full font-bold uppercase tracking-wider ${vStyle.badgeBg}`}>
-                        {assessment.verdict}
-                      </span>
-                      <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-950/60 font-mono text-slate-400 border border-slate-800">
-                        {assessment.assessment_id}
-                      </span>
-                    </div>
-                    <h3 className="text-xl md:text-2xl font-bold text-slate-100 mt-2">
-                      {assessment.verdict_title}
-                    </h3>
-                    <p className="text-sm text-slate-300 mt-2 max-w-3xl leading-relaxed">
-                      {assessment.recommendation.explanation}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Export / Copy Action Buttons */}
-                <div className="flex flex-wrap items-center gap-2.5 shrink-0 self-start md:self-auto">
-                  <button
-                    type="button"
-                    onClick={handleCopySummary}
-                    className="p-2.5 rounded-xl bg-slate-950/80 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white transition-all shadow-sm cursor-pointer"
-                    title="Copy Summary"
-                  >
-                    <Copy className="w-4 h-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleExport('json')}
-                    className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-950/80 hover:bg-slate-800 border border-slate-800 text-xs font-semibold text-slate-200 transition-all shadow-sm cursor-pointer"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    JSON
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleExport('markdown')}
-                    className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-950/80 hover:bg-slate-800 border border-slate-800 text-xs font-semibold text-slate-200 transition-all shadow-sm cursor-pointer"
-                  >
-                    <FileText className="w-3.5 h-3.5" />
-                    Markdown
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleExport('html')}
-                    className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-950/80 hover:bg-slate-800 border border-slate-800 text-xs font-semibold text-slate-200 transition-all shadow-sm cursor-pointer"
-                  >
-                    <Globe className="w-3.5 h-3.5" />
-                    HTML
-                  </button>
-                </div>
+          <div className={`advisor-verdict-box ${getVerdictStyleClass(assessment.verdict)}`}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
+              <div style={{ padding: '8px', background: 'rgba(8, 11, 18, 0.6)', borderRadius: '12px' }}>
+                {getVerdictIcon(assessment.verdict)}
               </div>
-            );
-          })()}
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.6px', textTransform: 'uppercase' }}>
+                    {assessment.verdict}
+                  </span>
+                  <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', opacity: 0.8 }}>
+                    {assessment.assessment_id}
+                  </span>
+                </div>
+                <h3 style={{ fontSize: '20px', fontWeight: 700, color: '#ffffff', margin: '8px 0 6px' }}>
+                  {assessment.verdict_title}
+                </h3>
+                <p style={{ fontSize: '13px', color: '#e6eaf2', maxWidth: '800px', lineHeight: 1.6 }}>
+                  {assessment.recommendation.explanation}
+                </p>
+              </div>
+            </div>
+
+            {/* Export & Copy Buttons */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={handleCopySummary}
+                className="button-secondary"
+                title="Copy Summary"
+              >
+                <Copy size={14} /> Copy
+              </button>
+              <button
+                type="button"
+                onClick={() => handleExport('json')}
+                className="button-secondary"
+              >
+                <Download size={14} /> JSON
+              </button>
+              <button
+                type="button"
+                onClick={() => handleExport('markdown')}
+                className="button-secondary"
+              >
+                <FileText size={14} /> Markdown
+              </button>
+              <button
+                type="button"
+                onClick={() => handleExport('html')}
+                className="button-secondary"
+              >
+                <Globe size={14} /> HTML
+              </button>
+            </div>
+          </div>
 
           {/* Metric Stats Row */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
-            <div className="rounded-2xl border border-slate-800/80 bg-slate-900/60 p-5 backdrop-blur-sm">
-              <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">Total Vulnerabilities</div>
-              <div className="text-3xl font-extrabold text-slate-100 mt-2">
-                {assessment.total_findings}
-              </div>
-              <div className="text-xs text-slate-400 mt-1.5">
+          <div className="advisor-metrics-row">
+            <div className="advisor-metric-card">
+              <span className="advisor-metric-title">Total Vulnerabilities</span>
+              <span className="advisor-metric-num">{assessment.total_findings}</span>
+              <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
                 {assessment.exact_matches_count} confirmed exact matches
-              </div>
+              </span>
             </div>
 
-            <div className="rounded-2xl border border-slate-800/80 bg-slate-900/60 p-5 backdrop-blur-sm">
-              <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">Evaluated Version</div>
-              <div className="text-2xl font-bold text-slate-100 mt-2 truncate">
+            <div className="advisor-metric-card">
+              <span className="advisor-metric-title">Evaluated Version</span>
+              <span className="advisor-metric-num" style={{ fontSize: '22px' }}>
                 {assessment.software.version || 'Unspecified'}
-              </div>
-              <div className="text-xs text-slate-400 mt-1.5 truncate">
+              </span>
+              <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
                 {assessment.software.product_name} ({assessment.software.ecosystem})
-              </div>
+              </span>
             </div>
 
-            <div className="rounded-2xl border border-slate-800/80 bg-slate-900/60 p-5 backdrop-blur-sm">
-              <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">Verified Fixed Release</div>
-              <div className="text-2xl font-bold text-emerald-400 mt-2 truncate">
+            <div className="advisor-metric-card">
+              <span className="advisor-metric-title">Verified Fixed Release</span>
+              <span className="advisor-metric-num" style={{ fontSize: '22px', color: '#58cf9b' }}>
                 {assessment.verified_fixed_version ? `v${assessment.verified_fixed_version}` : 'No known fix'}
-              </div>
-              <div className="text-xs text-slate-400 mt-1.5">
+              </span>
+              <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
                 {assessment.verified_fixed_version ? 'Upgrade path verified by advisory' : 'Check vendor for mitigations'}
-              </div>
+              </span>
             </div>
 
-            <div className="rounded-2xl border border-slate-800/80 bg-slate-900/60 p-5 backdrop-blur-sm">
-              <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">Recommended Action</div>
-              <div className="text-sm font-bold text-sky-400 mt-2 truncate">
+            <div className="advisor-metric-card">
+              <span className="advisor-metric-title">Recommended Action</span>
+              <span style={{ fontSize: '14px', fontWeight: 700, color: '#6b8cff' }}>
                 {assessment.recommendation.action}
-              </div>
-              <div className="text-xs text-slate-400 mt-1.5">
-                Confidence: <span className="font-semibold text-slate-300">{assessment.software.confidence}</span>
-              </div>
+              </span>
+              <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
+                Confidence: <b>{assessment.software.confidence}</b>
+              </span>
             </div>
           </div>
 
           {/* Potential Impacts Section */}
           {assessment.potential_impacts.length > 0 && (
-            <div className="rounded-2xl border border-slate-800/80 bg-slate-900/60 p-6 backdrop-blur-sm">
-              <div className="flex items-center gap-2.5 mb-4">
-                <AlertTriangle className="w-5 h-5 text-amber-400" />
-                <h4 className="text-sm font-bold uppercase tracking-wider text-slate-200">
+            <div className="advisor-card" style={{ padding: '22px 26px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
+                <AlertTriangle size={17} color="#f5aa64" />
+                <h4 style={{ fontSize: '13px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.6px', color: '#e6eaf2' }}>
                   Documented Potential Impacts
                 </h4>
               </div>
-              <div className="flex flex-wrap gap-2.5">
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                 {assessment.potential_impacts.map((impact, i) => (
                   <span
                     key={i}
-                    className="px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-amber-500/10 text-amber-300 border border-amber-500/30 shadow-sm"
+                    style={{
+                      padding: '6px 14px',
+                      borderRadius: '20px',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      background: 'rgba(245, 170, 100, 0.12)',
+                      color: '#f5aa64',
+                      border: '1px solid rgba(245, 170, 100, 0.28)',
+                    }}
                   >
                     {impact}
                   </span>
@@ -696,31 +677,29 @@ Verified Fixed Version: ${assessment.verified_fixed_version || 'None specified'}
 
           {/* AI Grounded Summary Card */}
           {assessment.ai && (
-            <div className="rounded-2xl border border-slate-800/80 bg-slate-900/70 p-6 md:p-8 backdrop-blur-md">
-              <div className="flex items-center justify-between pb-4 border-b border-slate-800 gap-4">
-                <div className="flex items-center gap-2.5">
-                  <Sparkles className="w-5 h-5 text-sky-400" />
-                  <h4 className="text-base font-bold text-slate-100">
+            <div className="advisor-card">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '16px', borderBottom: '1px solid var(--border-subtle)', flexWrap: 'wrap', gap: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <Sparkles size={18} color="#6b8cff" />
+                  <h4 style={{ fontSize: '15px', fontWeight: 700, color: '#ffffff' }}>
                     Evidence-Grounded AI Assessment
                   </h4>
                 </div>
-                <div className="flex items-center gap-2 text-xs">
-                  <span className="px-3 py-1 rounded-lg bg-slate-950 text-slate-300 font-mono border border-slate-800">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ padding: '3px 10px', borderRadius: '6px', background: 'rgba(13, 18, 27, 0.9)', border: '1px solid var(--border-default)', fontSize: '11px', fontFamily: 'var(--font-mono)' }}>
                     {assessment.ai.provider}
                   </span>
-                  <span className="px-3 py-1 rounded-lg bg-slate-950 text-slate-400 font-mono text-[11px] border border-slate-800">
+                  <span style={{ padding: '3px 10px', borderRadius: '6px', background: 'rgba(13, 18, 27, 0.9)', border: '1px solid var(--border-default)', fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--text-tertiary)' }}>
                     {assessment.ai.model}
                   </span>
                 </div>
               </div>
 
-              <div className="mt-6 space-y-6 text-sm text-slate-300 leading-relaxed">
+              <div style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
                 {assessment.ai.executive_summary && (
                   <div>
-                    <h5 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
-                      Executive Summary
-                    </h5>
-                    <div className="bg-slate-950/60 p-4 rounded-xl border border-slate-800/80 text-slate-200">
+                    <h5 className="advisor-label" style={{ marginBottom: '8px' }}>Executive Summary</h5>
+                    <div style={{ background: 'rgba(10, 14, 22, 0.7)', padding: '16px', borderRadius: '10px', border: '1px solid var(--border-subtle)', lineHeight: 1.6, fontSize: '13px' }}>
                       {assessment.ai.executive_summary}
                     </div>
                   </div>
@@ -728,10 +707,8 @@ Verified Fixed Version: ${assessment.verified_fixed_version || 'None specified'}
 
                 {assessment.ai.plain_english_impact && (
                   <div>
-                    <h5 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
-                      Plain-English Impact Analysis
-                    </h5>
-                    <div className="bg-slate-950/60 p-4 rounded-xl border border-slate-800/80 text-slate-200">
+                    <h5 className="advisor-label" style={{ marginBottom: '8px' }}>Plain-English Impact Analysis</h5>
+                    <div style={{ background: 'rgba(10, 14, 22, 0.7)', padding: '16px', borderRadius: '10px', border: '1px solid var(--border-subtle)', lineHeight: 1.6, fontSize: '13px' }}>
                       {assessment.ai.plain_english_impact}
                     </div>
                   </div>
@@ -739,12 +716,10 @@ Verified Fixed Version: ${assessment.verified_fixed_version || 'None specified'}
 
                 {assessment.ai.verification_steps && assessment.ai.verification_steps.length > 0 && (
                   <div>
-                    <h5 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
-                      Recommended Verification Steps
-                    </h5>
-                    <ul className="list-disc list-inside space-y-1.5 bg-slate-950/60 p-4 rounded-xl border border-slate-800/80 text-slate-300 text-xs">
+                    <h5 className="advisor-label" style={{ marginBottom: '8px' }}>Recommended Verification Steps</h5>
+                    <ul style={{ background: 'rgba(10, 14, 22, 0.7)', padding: '16px 20px', borderRadius: '10px', border: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '12px', listStyleType: 'disc', paddingLeft: '32px' }}>
                       {assessment.ai.verification_steps.map((step, idx) => (
-                        <li key={idx}>
+                        <li key={idx} style={{ color: 'var(--text-primary)' }}>
                           {step}
                         </li>
                       ))}
@@ -755,46 +730,36 @@ Verified Fixed Version: ${assessment.verified_fixed_version || 'None specified'}
             </div>
           )}
 
-          {/* Static File Inspection Metadata (if uploaded) */}
+          {/* Static File Inspection Metadata */}
           {assessment.file_metadata && (
-            <div className="rounded-2xl border border-slate-800/80 bg-slate-900/60 p-6 backdrop-blur-sm">
-              <div className="flex items-center gap-2.5 mb-4">
-                <FileCheck className="w-5 h-5 text-sky-400" />
-                <h4 className="text-sm font-bold uppercase tracking-wider text-slate-200">
+            <div className="advisor-card" style={{ padding: '22px 26px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
+                <FileCheck size={18} color="#6b8cff" />
+                <h4 style={{ fontSize: '13px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.6px', color: '#e6eaf2' }}>
                   Static File Inspection Metadata
                 </h4>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono bg-slate-950/80 p-4 rounded-xl border border-slate-800">
-                <div>
-                  <span className="text-slate-400 font-semibold">Filename:</span> {assessment.file_metadata.filename}
-                </div>
-                <div>
-                  <span className="text-slate-400 font-semibold">Size:</span> {(assessment.file_metadata.size_bytes / 1024).toFixed(1)} KB
-                </div>
-                <div className="col-span-1 md:col-span-2 truncate">
-                  <span className="text-slate-400 font-semibold">SHA-256:</span> {assessment.file_metadata.sha256}
-                </div>
-                <div>
-                  <span className="text-slate-400 font-semibold">Format:</span> {assessment.file_metadata.detected_type}
-                </div>
-                <div>
-                  <span className="text-slate-400 font-semibold">Execution Status:</span> Non-executed (Safe Static Only)
-                </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '12px', background: 'rgba(9, 13, 20, 0.8)', padding: '16px', borderRadius: '10px', border: '1px solid var(--border-subtle)', fontSize: '12px', fontFamily: 'var(--font-mono)' }}>
+                <div><span style={{ color: 'var(--text-tertiary)' }}>Filename:</span> {assessment.file_metadata.filename}</div>
+                <div><span style={{ color: 'var(--text-tertiary)' }}>Size:</span> {(assessment.file_metadata.size_bytes / 1024).toFixed(1)} KB</div>
+                <div style={{ gridColumn: '1 / -1', overflow: 'hidden', textOverflow: 'ellipsis' }}><span style={{ color: 'var(--text-tertiary)' }}>SHA-256:</span> {assessment.file_metadata.sha256}</div>
+                <div><span style={{ color: 'var(--text-tertiary)' }}>Format:</span> {assessment.file_metadata.detected_type}</div>
+                <div><span style={{ color: 'var(--text-tertiary)' }}>Execution:</span> Non-executed (Safe Static Only)</div>
               </div>
               {assessment.file_metadata.suspicious_flags.length > 0 && (
-                <div className="mt-4 p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl text-xs text-rose-300">
-                  <span className="font-bold">Static Warning Flags:</span> {assessment.file_metadata.suspicious_flags.join('; ')}
+                <div style={{ marginTop: '14px', padding: '12px 16px', background: 'rgba(242, 120, 133, 0.1)', border: '1px solid rgba(242, 120, 133, 0.3)', borderRadius: '10px', fontSize: '12px', color: '#f27885' }}>
+                  <b>Static Warning Flags:</b> {assessment.file_metadata.suspicious_flags.join('; ')}
                 </div>
               )}
             </div>
           )}
 
           {/* Vulnerability Findings Table */}
-          <div className="rounded-2xl border border-slate-800/80 bg-slate-900/60 p-6 md:p-8 backdrop-blur-sm">
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 mb-6">
-              <div className="flex items-center gap-2.5">
-                <Search className="w-5 h-5 text-slate-400" />
-                <h4 className="text-base font-bold text-slate-100">
+          <div className="advisor-card">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px', flexWrap: 'wrap', gap: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Search size={17} color="var(--text-secondary)" />
+                <h4 style={{ fontSize: '15px', fontWeight: 700, color: '#ffffff' }}>
                   Vulnerability Findings ({assessment.total_findings})
                 </h4>
               </div>
@@ -803,75 +768,78 @@ Verified Fixed Version: ${assessment.verified_fixed_version || 'None specified'}
                 value={findingsFilter}
                 onChange={e => setFindingsFilter(e.target.value)}
                 placeholder="Filter findings by CVE, severity, or description..."
-                className="h-10 px-4 bg-slate-950/70 border border-slate-800 rounded-xl text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-sky-500 w-full sm:w-80"
+                className="advisor-input"
+                style={{ height: '38px', maxWidth: '320px', fontSize: '12px' }}
               />
             </div>
 
             {filteredFindings.length === 0 ? (
-              <div className="py-12 text-center text-xs text-slate-500">
+              <div style={{ textAlign: 'center', padding: '36px', color: 'var(--text-tertiary)', fontSize: '13px' }}>
                 {assessment.total_findings === 0
                   ? 'No matching vulnerability records found in checked sources.'
                   : 'No findings match the current filter term.'}
               </div>
             ) : (
-              <div className="overflow-x-auto rounded-xl border border-slate-800/80">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-950 text-slate-400 border-b border-slate-800">
+              <div style={{ overflowX: 'auto', borderRadius: '10px', border: '1px solid var(--border-subtle)' }}>
+                <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse', fontSize: '12px' }}>
+                  <thead style={{ background: 'rgba(8, 12, 18, 0.9)', color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-default)' }}>
                     <tr>
-                      <th className="py-3 px-4 font-semibold">Identifier</th>
-                      <th className="py-3 px-4 font-semibold">Severity</th>
-                      <th className="py-3 px-4 font-semibold">CVSS</th>
-                      <th className="py-3 px-4 font-semibold">Match Type</th>
-                      <th className="py-3 px-4 font-semibold">Affected Range / Fix</th>
-                      <th className="py-3 px-4 font-semibold">Summary</th>
-                      <th className="py-3 px-4 font-semibold">Advisory</th>
+                      <th style={{ padding: '12px 16px', fontWeight: 600 }}>Identifier</th>
+                      <th style={{ padding: '12px 16px', fontWeight: 600 }}>Severity</th>
+                      <th style={{ padding: '12px 16px', fontWeight: 600 }}>CVSS</th>
+                      <th style={{ padding: '12px 16px', fontWeight: 600 }}>Match Type</th>
+                      <th style={{ padding: '12px 16px', fontWeight: 600 }}>Affected Range / Fix</th>
+                      <th style={{ padding: '12px 16px', fontWeight: 600 }}>Summary</th>
+                      <th style={{ padding: '12px 16px', fontWeight: 600 }}>Advisory</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-800/60 bg-slate-900/40">
+                  <tbody>
                     {filteredFindings.map((f, i) => (
-                      <tr key={i} className="hover:bg-slate-800/40 transition-colors">
-                        <td className="py-3 px-4 font-mono font-medium text-slate-200 whitespace-nowrap">
+                      <tr key={i} style={{ borderBottom: '1px solid var(--border-subtle)', background: i % 2 === 0 ? 'transparent' : 'rgba(255, 255, 255, 0.015)' }}>
+                        <td style={{ padding: '12px 16px', fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
                           {f.id}
                         </td>
-                        <td className="py-3 px-4 whitespace-nowrap">
+                        <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
                           <SeverityBadge severity={f.severity} />
                         </td>
-                        <td className="py-3 px-4 font-mono text-slate-300">
+                        <td style={{ padding: '12px 16px', fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
                           {f.cvss_score !== null ? f.cvss_score.toFixed(1) : '—'}
                         </td>
-                        <td className="py-3 px-4 whitespace-nowrap">
+                        <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
                           <span
-                            className={`px-2.5 py-1 rounded-md text-[11px] font-semibold ${
-                              f.match_type === 'EXACT'
-                                ? 'bg-rose-500/10 text-rose-300 border border-rose-500/30'
-                                : f.match_type === 'RANGE_MATCH'
-                                ? 'bg-amber-500/10 text-amber-300 border border-amber-500/30'
-                                : 'bg-slate-800 text-slate-400'
-                            }`}
+                            style={{
+                              padding: '3px 8px',
+                              borderRadius: '6px',
+                              fontSize: '11px',
+                              fontWeight: 600,
+                              background: f.match_type === 'EXACT' ? 'rgba(242, 120, 133, 0.15)' : f.match_type === 'RANGE_MATCH' ? 'rgba(245, 170, 100, 0.15)' : 'rgba(255, 255, 255, 0.05)',
+                              color: f.match_type === 'EXACT' ? '#f27885' : f.match_type === 'RANGE_MATCH' ? '#f5aa64' : 'var(--text-secondary)',
+                              border: f.match_type === 'EXACT' ? '1px solid rgba(242, 120, 133, 0.3)' : f.match_type === 'RANGE_MATCH' ? '1px solid rgba(245, 170, 100, 0.3)' : '1px solid var(--border-subtle)',
+                            }}
                           >
                             {f.match_type}
                           </span>
                         </td>
-                        <td className="py-3 px-4 text-slate-300 text-[11px]">
+                        <td style={{ padding: '12px 16px', color: 'var(--text-primary)', fontSize: '11px' }}>
                           <div>{f.range_description}</div>
                           {f.verified_fixed_version && (
-                            <div className="text-emerald-400 font-semibold mt-0.5">
+                            <div style={{ color: '#58cf9b', fontWeight: 600, marginTop: '2px' }}>
                               Fix: v{f.verified_fixed_version}
                             </div>
                           )}
                         </td>
-                        <td className="py-3 px-4 text-slate-300 max-w-md truncate" title={f.details}>
+                        <td style={{ padding: '12px 16px', color: 'var(--text-secondary)', maxWidth: '400px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={f.details}>
                           {f.summary}
                         </td>
-                        <td className="py-3 px-4 whitespace-nowrap">
+                        <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
                           <a
                             href={f.source_url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-sky-400 hover:text-sky-300 inline-flex items-center gap-1 font-semibold"
+                            style={{ color: 'var(--accent-blue)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px', textDecoration: 'none' }}
                           >
                             Source
-                            <ExternalLink className="w-3.5 h-3.5" />
+                            <ExternalLink size={12} />
                           </a>
                         </td>
                       </tr>
@@ -883,25 +851,25 @@ Verified Fixed Version: ${assessment.verified_fixed_version || 'None specified'}
           </div>
 
           {/* Sources Checked & Limitations Disclaimer */}
-          <div className="rounded-2xl border border-slate-800/80 bg-slate-900/60 p-6 backdrop-blur-sm">
-            <div className="flex items-center gap-2 mb-3">
-              <Info className="w-4 h-4 text-slate-400" />
-              <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+          <div className="advisor-card" style={{ padding: '20px 24px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px' }}>
+              <Info size={15} color="var(--text-secondary)" />
+              <h4 style={{ fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.6px', color: 'var(--text-secondary)' }}>
                 Coverage, Sources & Assessment Limitations
               </h4>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs text-slate-400 mt-2">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px', fontSize: '12px', color: 'var(--text-secondary)' }}>
               <div>
-                <span className="font-semibold text-slate-300 block mb-1">Sources Checked:</span>
-                <ul className="list-disc list-inside space-y-1">
+                <b style={{ color: 'var(--text-primary)' }}>Sources Checked:</b>
+                <ul style={{ listStyleType: 'disc', paddingLeft: '20px', marginTop: '6px' }}>
                   {assessment.sources_checked.map((src, i) => (
                     <li key={i}>{src}</li>
                   ))}
                 </ul>
               </div>
               <div>
-                <span className="font-semibold text-slate-300 block mb-1">Important Disclaimers:</span>
-                <ul className="list-disc list-inside space-y-1">
+                <b style={{ color: 'var(--text-primary)' }}>Important Disclaimers:</b>
+                <ul style={{ listStyleType: 'disc', paddingLeft: '20px', marginTop: '6px' }}>
                   {assessment.limitations.map((lim, i) => (
                     <li key={i}>{lim}</li>
                   ))}
@@ -912,18 +880,18 @@ Verified Fixed Version: ${assessment.verified_fixed_version || 'None specified'}
         </div>
       )}
 
-      {/* ── Interactive AI Grounded Software Security Chat (Spacious & Always Accessible) ── */}
-      <div className="rounded-2xl border border-slate-800/80 bg-gradient-to-b from-slate-900/90 to-slate-950 p-6 md:p-8 shadow-xl shadow-black/40 backdrop-blur-md">
-        <div className="flex flex-wrap items-center justify-between pb-4 border-b border-slate-800/80 gap-3">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-sky-500/10 border border-sky-500/20 text-sky-400">
-              <Terminal className="w-5 h-5" />
+      {/* ── Interactive AI Grounded Software Security Chat (Always Visible & Sleek) ── */}
+      <div className="advisor-chat-card">
+        <div className="advisor-chat-header">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ padding: '8px', background: 'rgba(107, 140, 255, 0.1)', borderRadius: '10px' }}>
+              <Terminal size={18} color="#6b8cff" />
             </div>
             <div>
-              <h4 className="text-base font-bold text-slate-100">
+              <h4 style={{ fontSize: '15px', fontWeight: 700, color: '#ffffff' }}>
                 {assessment ? 'Ask AI About This Assessment' : 'AI Software Security Assistant & Chat'}
               </h4>
-              <p className="text-xs text-slate-400 mt-0.5">
+              <p style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginTop: '2px' }}>
                 {assessment
                   ? `Context-grounded analysis for ${assessment.software.product_name} v${assessment.software.version}`
                   : `Ask any software safety or CVE question powered by ${provider.toUpperCase()}`}
@@ -931,8 +899,7 @@ Verified Fixed Version: ${assessment.verified_fixed_version || 'None specified'}
             </div>
           </div>
 
-          <span className="text-xs text-sky-400 font-mono bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800 flex items-center gap-1.5 shadow-sm">
-            <Sparkles className="w-3.5 h-3.5" />
+          <span style={{ fontSize: '12px', fontFamily: 'var(--font-mono)', color: 'var(--accent-blue)', background: 'rgba(8, 11, 18, 0.7)', padding: '4px 12px', borderRadius: '8px', border: '1px solid var(--border-default)' }}>
             {assessment
               ? `Evidence: ${assessment.total_findings} findings loaded`
               : `Engine: ${provider.toUpperCase()}`}
@@ -940,44 +907,38 @@ Verified Fixed Version: ${assessment.verified_fixed_version || 'None specified'}
         </div>
 
         {/* Quick Suggested Questions */}
-        <div className="my-5">
-          <div className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2.5 flex items-center gap-1.5">
-            <Bot className="w-3.5 h-3.5 text-sky-400" />
-            Suggested Questions:
-          </div>
-          <div className="flex flex-wrap gap-2.5">
-            {(assessment
-              ? [
-                  'Explain the highest severity vulnerability in simple English.',
-                  'Why is this specific version affected?',
-                  'Which fixed version is supported by the vendor advisory?',
-                  'What should our administrator verify before installation?',
-                ]
-              : [
-                  'What are the security risks of OpenSSL 3.0.0?',
-                  'How do I check if my package has known CVEs?',
-                  'What does CVSS score 9.8 mean?',
-                  'What should our team verify before installing a third-party package?',
-                ]
-            ).map((q, idx) => (
-              <button
-                key={idx}
-                type="button"
-                onClick={() => handleAskQuestion(q)}
-                className="px-3.5 py-2 rounded-xl bg-slate-950/80 border border-slate-800 hover:border-sky-500/60 text-xs font-medium text-slate-300 hover:text-white transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
-              >
-                <span>{q}</span>
-                <ArrowRight className="w-3 h-3 text-slate-500" />
-              </button>
-            ))}
-          </div>
+        <div className="advisor-chat-prompts">
+          {(assessment
+            ? [
+                'Explain the highest severity vulnerability in simple English.',
+                'Why is this specific version affected?',
+                'Which fixed version is supported by the vendor advisory?',
+                'What should our administrator verify before installation?',
+              ]
+            : [
+                'What are the security risks of OpenSSL 3.0.0?',
+                'How do I check if my package has known CVEs?',
+                'What does CVSS score 9.8 mean?',
+                'What should our team verify before installing a third-party package?',
+              ]
+          ).map((q, idx) => (
+            <button
+              key={idx}
+              type="button"
+              onClick={() => handleAskQuestion(q)}
+              className="advisor-chat-prompt-pill"
+            >
+              <span>{q}</span>
+              <ArrowRight size={12} color="var(--text-tertiary)" />
+            </button>
+          ))}
         </div>
 
         {/* Chat Messages Thread */}
-        <div className="my-4 p-4 min-h-[180px] max-h-[380px] overflow-y-auto rounded-xl bg-slate-950/70 border border-slate-800/90 space-y-4">
+        <div className="advisor-chat-thread">
           {chatMessages.length === 0 ? (
-            <div className="py-10 text-center text-xs text-slate-500 flex flex-col items-center gap-2">
-              <Bot className="w-8 h-8 text-slate-600 mb-1" />
+            <div style={{ textAlign: 'center', padding: '36px 16px', color: 'var(--text-tertiary)', fontSize: '13px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+              <Bot size={28} color="var(--border-strong)" />
               <span>
                 {assessment
                   ? 'Have questions about these vulnerabilities? Type below or pick a suggested question above.'
@@ -988,53 +949,43 @@ Verified Fixed Version: ${assessment.verified_fixed_version || 'None specified'}
             chatMessages.map((msg, i) => (
               <div
                 key={i}
-                className={`flex flex-col ${
-                  msg.sender === 'user' ? 'items-end' : 'items-start'
-                }`}
+                className={msg.sender === 'user' ? 'advisor-chat-bubble-user' : 'advisor-chat-bubble-ai'}
               >
-                <div
-                  className={`max-w-2xl px-4 py-3 rounded-2xl text-xs md:text-sm leading-relaxed shadow-md ${
-                    msg.sender === 'user'
-                      ? 'bg-gradient-to-r from-sky-600 to-blue-600 text-white rounded-br-none'
-                      : 'bg-slate-900 border border-slate-800 text-slate-200 rounded-bl-none'
-                  }`}
-                >
-                  <div className="font-semibold text-[11px] mb-1 opacity-70 flex items-center gap-1">
-                    {msg.sender === 'user' ? (
-                      <>
-                        <User className="w-3 h-3" /> You
-                      </>
-                    ) : (
-                      <>
-                        <Bot className="w-3 h-3 text-sky-400" /> Security Assistant
-                      </>
-                    )}
-                  </div>
-                  <div className="whitespace-pre-wrap">{msg.text}</div>
-                  {msg.citations && msg.citations.length > 0 && (
-                    <div className="mt-3 pt-2.5 border-t border-slate-800 text-[11px] text-sky-400 flex flex-wrap items-center gap-1.5">
-                      <span className="font-semibold text-slate-400">Citations:</span>
-                      {msg.citations.map((c, ci) => (
-                        <span key={ci} className="font-mono bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
-                          {c}
-                        </span>
-                      ))}
-                    </div>
+                <div style={{ fontSize: '11px', fontWeight: 600, opacity: 0.7, marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  {msg.sender === 'user' ? (
+                    <>
+                      <User size={12} /> You
+                    </>
+                  ) : (
+                    <>
+                      <Bot size={12} color="#6b8cff" /> Security Assistant
+                    </>
                   )}
                 </div>
+                <div style={{ whiteSpace: 'pre-wrap' }}>{msg.text}</div>
+                {msg.citations && msg.citations.length > 0 && (
+                  <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: '1px solid rgba(255, 255, 255, 0.1)', fontSize: '11px', color: 'var(--accent-blue)', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ color: 'var(--text-tertiary)' }}>Citations:</span>
+                    {msg.citations.map((c, ci) => (
+                      <span key={ci} style={{ fontFamily: 'var(--font-mono)', background: 'rgba(8, 11, 18, 0.8)', padding: '2px 6px', borderRadius: '4px', border: '1px solid var(--border-default)' }}>
+                        {c}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             ))
           )}
           {chatLoading && (
-            <div className="flex items-center gap-2.5 text-xs text-slate-400 italic py-2">
-              <RefreshCw className="w-4 h-4 animate-spin text-sky-400" />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'var(--text-secondary)', fontStyle: 'italic', padding: '8px' }}>
+              <RefreshCw size={14} className="animate-spin" color="var(--accent-blue)" />
               Generating grounded answer...
             </div>
           )}
         </div>
 
         {/* Chat Input */}
-        <div className="pt-2 flex items-center gap-3">
+        <div className="advisor-chat-input-bar">
           <input
             type="text"
             value={chatQuestion}
@@ -1050,15 +1001,15 @@ Verified Fixed Version: ${assessment.verified_fixed_version || 'None specified'}
                 ? 'Ask a question about these vulnerabilities...'
                 : 'Ask about any vulnerability, CVE, or package security risk...'
             }
-            className="flex-1 h-12 px-4 bg-slate-950/80 border border-slate-800 rounded-xl text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 transition-all"
+            className="advisor-chat-input"
           />
           <button
             type="button"
             onClick={() => handleAskQuestion()}
             disabled={chatLoading || !chatQuestion.trim()}
-            className="h-12 px-6 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 disabled:from-slate-800 disabled:to-slate-800 disabled:text-slate-600 text-white font-semibold text-xs rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer"
+            className="advisor-chat-send-btn"
           >
-            <Send className="w-4 h-4" />
+            <Send size={15} />
             Ask
           </button>
         </div>
