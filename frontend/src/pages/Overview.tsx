@@ -142,37 +142,51 @@ interface OverviewProps {
   onSelect: (page: string) => void;
 }
 
+let overviewCache: {
+  metrics?: Metrics;
+  recent?: Vulnerability[];
+  mlCoverage?: MLCoverage | null;
+} | null = null;
+
 export default function Overview({ source, onSelect }: OverviewProps) {
-  const [metrics, setMetrics] = useState<Metrics | null>(null);
-  const [recent, setRecent] = useState<Vulnerability[]>([]);
-  const [mlCoverage, setMlCoverage] = useState<MLCoverage | null>(null);
+  const [metrics, setMetrics] = useState<Metrics | null>(overviewCache?.metrics ?? null);
+  const [recent, setRecent] = useState<Vulnerability[]>(overviewCache?.recent ?? []);
+  const [mlCoverage, setMlCoverage] = useState<MLCoverage | null>(overviewCache?.mlCoverage ?? null);
   const [reviewRows, setReviewRows] = useState<Vulnerability[]>([]);
   const [reviewFilter, setReviewFilter] = useState<'needs_review' | 'high_unknown' | 'unscored'>('needs_review');
   const [reviewSearch, setReviewSearch] = useState('');
   const [reviewTotal, setReviewTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!overviewCache?.metrics);
   const [error, setError] = useState('');
 
   const loadData = () => {
-    setLoading(true);
+    setLoading(!overviewCache?.metrics);
     setError('');
 
-    Promise.all([
-      api<{ metrics: Metrics; recent: Vulnerability[] }>('/summary'),
-      api<{ coverage: MLCoverage }>('/ml/coverage?per_page=1').catch(() => null),
-    ])
-      .then(([data, coverage]) => {
+    api<{ metrics: Metrics; recent: Vulnerability[] }>('/summary')
+      .then(data => {
+        overviewCache = { ...overviewCache, metrics: data.metrics, recent: data.recent ?? [] };
         setMetrics(data.metrics);
         setRecent(data.recent ?? []);
-        setMlCoverage(coverage?.coverage ?? null);
       })
       .catch((err: Error) => {
-        setError(err.message || 'Failed to load overview data');
-        showToast('Error loading overview data', 'error');
+        if (!overviewCache?.metrics) {
+          setError(err.message || 'Failed to load overview data');
+          showToast('Error loading overview data', 'error');
+        }
       })
       .finally(() => {
         setLoading(false);
       });
+
+    // This endpoint fits the ML models. Load it independently so it cannot
+    // hold the core dashboard metrics behind a potentially slow computation.
+    api<{ coverage: MLCoverage }>('/ml/coverage?per_page=1')
+      .then(({ coverage }) => {
+        overviewCache = { ...overviewCache, mlCoverage: coverage };
+        setMlCoverage(coverage);
+      })
+      .catch(() => setMlCoverage(null));
   };
 
   useEffect(() => {

@@ -6,6 +6,11 @@
 
 const BASE = import.meta.env.VITE_API_URL ?? '/api';
 
+const GET_CACHE_TTL_MS = 20_000;
+const GET_CACHE_MAX_ENTRIES = 40;
+const getCache = new Map<string, { expiresAt: number; value: unknown }>();
+const inFlightGets = new Map<string, Promise<unknown>>();
+
 // ─── Types ───────────────────────────────────────────────────────────
 
 export interface Vulnerability {
@@ -354,22 +359,54 @@ export interface ApiError {
  * Generic API request with error handling.
  */
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${BASE}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...init?.headers,
-    },
-  });
+  const method = (init?.method ?? 'GET').toUpperCase();
+  const cacheKey = `${BASE}${path}`;
+  const cacheable = method === 'GET' && init?.cache !== 'no-store' && !init?.signal;
 
-  if (!response.ok) {
-    const body = await response.json().catch(() => null);
-    throw new Error(
-      body?.error?.message ?? `API request failed (${response.status})`
-    );
+  if (cacheable) {
+    const cached = getCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) return cached.value as T;
+    getCache.delete(cacheKey);
+    const pending = inFlightGets.get(cacheKey);
+    if (pending) return pending as Promise<T>;
+  } else if (method !== 'GET') {
+    getCache.clear();
   }
 
-  return response.json();
+  const request = (async () => {
+    const response = await fetch(cacheKey, {
+      ...init,
+      headers: {
+        'Content-Type': 'application/json',
+        ...init?.headers,
+      },
+    });
+
+    if (!response.ok) {
+      const body = await response.json().catch(() => null);
+      throw new Error(
+        body?.error?.message ?? `API request failed (${response.status})`
+      );
+    }
+
+    const value = await response.json();
+    if (cacheable) {
+      getCache.set(cacheKey, { expiresAt: Date.now() + GET_CACHE_TTL_MS, value });
+      while (getCache.size > GET_CACHE_MAX_ENTRIES) {
+        const oldest = getCache.keys().next().value;
+        if (oldest === undefined) break;
+        getCache.delete(oldest);
+      }
+    }
+    return value as T;
+  })();
+
+  if (cacheable) inFlightGets.set(cacheKey, request);
+  try {
+    return await request;
+  } finally {
+    if (cacheable) inFlightGets.delete(cacheKey);
+  }
 }
 
 /**
