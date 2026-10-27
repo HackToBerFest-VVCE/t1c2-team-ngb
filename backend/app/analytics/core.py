@@ -149,37 +149,39 @@ def add_severity_review(frame: pd.DataFrame, *, copy: bool = True) -> pd.DataFra
     invalid_cvss = score.notna() & ~score.between(0, 10)
     mismatch = (~missing_severity) & band.notna() & source.isin({"CRITICAL", "HIGH", "MEDIUM", "LOW", "NONE"}) & source.ne(band.fillna(""))
     description_missing = result.description.fillna("").astype(str).str.strip().eq("") if "description" in result else pd.Series(True, index=result.index)
-    reasons = []
-    priorities = []
-    for idx in result.index:
+    unknown_values = missing_severity.to_numpy(dtype=bool)
+    missing_score_values = missing_cvss.to_numpy(dtype=bool)
+    mismatch_values = mismatch.fillna(False).to_numpy(dtype=bool)
+    invalid_values = invalid_cvss.fillna(False).to_numpy(dtype=bool)
+    description_values = description_missing.to_numpy(dtype=bool)
+    score_values = score.to_numpy(dtype=float, na_value=np.nan)
+    critical_unknown = unknown_values & (score_values >= 9) & (score_values <= 10)
+    high_unknown = unknown_values & (score_values >= 7) & (score_values < 9)
+    priority_values = np.select(
+        [critical_unknown, high_unknown, mismatch_values | invalid_values,
+         unknown_values & missing_score_values, unknown_values, missing_score_values, description_values],
+        ["URGENT_REVIEW", "HIGH_REVIEW", "VERIFY_SOURCE", "MANUAL_REVIEW", "REVIEW", "VERIFY_SCORE", "VERIFY_CONTEXT"],
+        default="NO_REVIEW_FLAG",
+    )
+    reasons = [[] for _ in range(len(result))]
+    review_positions = np.flatnonzero(
+        unknown_values | missing_score_values | mismatch_values | invalid_values | description_values
+    )
+    for pos in review_positions:
         row_reasons = []
-        if missing_severity.loc[idx]:
+        if unknown_values[pos]:
             row_reasons.append("Source severity is UNKNOWN or missing")
-        if missing_cvss.loc[idx]:
+        if missing_score_values[pos]:
             row_reasons.append("Source CVSS score is missing")
-        if mismatch.loc[idx]:
+        if mismatch_values[pos]:
             row_reasons.append("Source severity conflicts with its CVSS-indicated band")
-        if invalid_cvss.loc[idx]:
+        if invalid_values[pos]:
             row_reasons.append("Source CVSS score is outside the valid 0–10 range")
-        if description_missing.loc[idx] and (missing_severity.loc[idx] or missing_cvss.loc[idx] or mismatch.loc[idx]):
+        if description_values[pos]:
             row_reasons.append("Description missing; impact context is insufficient")
-        reasons.append(row_reasons)
-        if missing_severity.loc[idx] and pd.notna(score.loc[idx]) and score.loc[idx] >= 9:
-            priorities.append("URGENT_REVIEW")
-        elif missing_severity.loc[idx] and pd.notna(score.loc[idx]) and score.loc[idx] >= 7:
-            priorities.append("HIGH_REVIEW")
-        elif mismatch.loc[idx] or invalid_cvss.loc[idx]:
-            priorities.append("VERIFY_SOURCE")
-        elif missing_severity.loc[idx] and missing_cvss.loc[idx]:
-            priorities.append("MANUAL_REVIEW")
-        elif missing_severity.loc[idx]:
-            priorities.append("REVIEW")
-        elif missing_cvss.loc[idx]:
-            priorities.append("VERIFY_SCORE")
-        else:
-            priorities.append("NO_REVIEW_FLAG")
+        reasons[pos] = row_reasons
     result["review_reasons"] = reasons
-    result["review_priority"] = priorities
+    result["review_priority"] = priority_values
     result["review_evidence_url"] = result.get("source_url", pd.Series("", index=result.index)).fillna("").astype(str)
     result["affected_product_evidence"] = result.get("affected_products", pd.Series("", index=result.index)).fillna("").astype(str)
     result["affected_version_evidence"] = None

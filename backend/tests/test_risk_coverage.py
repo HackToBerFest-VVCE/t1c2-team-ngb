@@ -65,6 +65,11 @@ class TestSeverityReview:
         result = add_priority(frame)
         assert result.loc[0, "priority_score"] == 60.0
 
+    def test_missing_description_is_a_context_review_reason(self):
+        result = add_severity_review(make_frame([{"description": "  "}]))
+        assert result.loc[0, "review_priority"] == "VERIFY_CONTEXT"
+        assert "Description missing; impact context is insufficient" in result.loc[0, "review_reasons"]
+
     def test_unavailable_vendor_advisory_is_explicit_manual_verification(self):
         evidence = UnconfiguredEvidenceAdapter().lookup("CVE-2026-1000")
         assert evidence["status"] == "UNAVAILABLE"
@@ -214,6 +219,7 @@ class TestReviewQueueAPI:
             {"cve_id": "CVE-2026-2002", "severity": "UNKNOWN", "cvss_score": 7.2},
             {"cve_id": "CVE-2026-2003", "severity": "NONE", "cvss_score": 0.0},
             {"cve_id": "CVE-2026-2004", "severity": "LOW", "cvss_score": 2.0},
+            {"cve_id": "CVE-2026-2005", "severity": "UNKNOWN", "cvss_score": 9.1, "description": ""},
         ])
         frame = add_record_ids(frame)
         first = frame.iloc[0].record_id
@@ -226,8 +232,8 @@ class TestReviewQueueAPI:
         response = client.get("/api/vulnerabilities?review=high_unknown&sort=cvss_score&order=desc")
         assert response.status_code == 200
         data = response.get_json()
-        assert data["total"] == 2
-        assert {row["cve_id"] for row in data["items"]} == {"CVE-2026-2001", "CVE-2026-2002"}
+        assert data["total"] == 3
+        assert {row["cve_id"] for row in data["items"]} == {"CVE-2026-2001", "CVE-2026-2002", "CVE-2026-2005"}
         sampled = next(row for row in data["items"] if row["cve_id"] == "CVE-2026-2001")
         unsampled = next(row for row in data["items"] if row["cve_id"] == "CVE-2026-2002")
         assert sampled["severity"] == "UNKNOWN"
@@ -237,6 +243,9 @@ class TestReviewQueueAPI:
         assert sampled["anomaly_score"] == -0.2
         assert unsampled["ml_analysis_status"] == "NOT_ANALYZED_OUTSIDE_SAMPLE"
         assert unsampled["cluster"] is None
+        missing_description = next(row for row in data["items"] if row["cve_id"] == "CVE-2026-2005")
+        assert missing_description["severity"] == "UNKNOWN"
+        assert missing_description["ml_analysis_status"] == "NOT_ANALYZED_MISSING_DESCRIPTION"
 
     def test_demo_mode_coverage_endpoint_reports_computed_counts(self, client, monkeypatch):
         frame = add_record_ids(make_frame([

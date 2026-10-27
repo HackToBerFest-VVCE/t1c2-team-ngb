@@ -1036,7 +1036,7 @@ Verified Fixed Version: ${assessment.verified_fixed_version || 'None specified'}
           {chatLoading && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'var(--text-secondary)', fontStyle: 'italic', padding: '8px' }}>
               <RefreshCw size={14} className="animate-spin" color="var(--accent-blue)" />
-              Generating grounded answer...
+              Waiting for a grounded answer (local fallback is used if the model times out)…
             </div>
           )}
         </div>

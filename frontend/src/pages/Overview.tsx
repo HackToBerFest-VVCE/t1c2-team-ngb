@@ -223,7 +223,7 @@ export default function Overview({ source, onSelect }: OverviewProps) {
       <Card
         title="Risk & Coverage Review"
         subtitle="Live source counts and current ML run. CVSS-indicated bands are review hints and never replace source severity."
-        action={<button className="text-action" onClick={() => onSelect('Vulnerability Explorer')}>Open review queue <ArrowUpRight size={14} /></button>}
+        action={<button className="text-action" onClick={() => { sessionStorage.setItem('threatlens-review-filter', 'needs_review'); onSelect('Vulnerability Explorer'); }}>Open review queue <ArrowUpRight size={14} /></button>}
       >
         <div className="metric-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
           <div className="metric-card"><small>TOTAL ACTIVE RECORDS</small><strong>{mlCoverage?.total_active_records.toLocaleString() ?? metrics.total.toLocaleString()}</strong><span>Loaded, non-rejected source records</span></div>

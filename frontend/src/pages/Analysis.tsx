@@ -631,6 +631,7 @@ export function Risk() {
 export function ML() {
   const [clusters, setClusters] = useState<ClustersResponse | null>(null);
   const [coverageManifest, setCoverageManifest] = useState<MLCoverageResponse | null>(null);
+  const [coveragePage, setCoveragePage] = useState(1);
   const [anomalies, setAnomalies] = useState<any>(null);
   const [training, setTraining] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -644,13 +645,11 @@ export function ML() {
       api<ClustersResponse>('/ml/clusters'),
       api<any>('/ml/anomalies'),
       api<any>('/ml/training'),
-      api<MLCoverageResponse>('/ml/coverage?per_page=10'),
     ])
-      .then(([cls, anm, report, coverage]) => {
+      .then(([cls, anm, report]) => {
         setClusters(cls);
         setAnomalies(anm);
         setTraining(report);
-        setCoverageManifest(coverage);
       })
       .catch((err: Error) => {
         setError(err.message || 'Failed to load ML analysis');
@@ -662,6 +661,12 @@ export function ML() {
   useEffect(() => {
     loadML();
   }, []);
+
+  useEffect(() => {
+    api<MLCoverageResponse>(`/ml/coverage?page=${coveragePage}&per_page=10`)
+      .then(setCoverageManifest)
+      .catch(() => setCoverageManifest(null));
+  }, [coveragePage]);
 
   // Safe extraction of anomaly list whether backend returns { items: [] } or array directly
   const anomalyList: Vulnerability[] = useMemo(() => {
@@ -752,6 +757,14 @@ export function ML() {
               <tbody>{coverageManifest?.assignments?.map(item => <tr key={item.record_id}><td className="mono">{item.record_id}</td><td>{item.cve_id}</td><td>ANALYZED · IN SAMPLE</td><td>Pattern {item.cluster + 1}</td><td className="mono">{item.anomaly_score.toFixed(6)}</td></tr>)}
                 {!coverageManifest?.assignments?.length && <tr><td colSpan={5}><div className="empty-row">No records were scored in this run.</div></td></tr>}</tbody>
             </table></div>
+            <div className="pagination">
+              <span className="page-info">Showing {coverageManifest?.assignment_count ? Math.min(coveragePage * 10, coverageManifest.assignment_count) : 0} of {coverageManifest?.assignment_count ?? 0} analyzed sample records</span>
+              <div className="pagination-buttons">
+                <button className="button-secondary" disabled={!coverageManifest || coveragePage <= 1} onClick={() => setCoveragePage(value => Math.max(1, value - 1))}>Previous</button>
+                <span>Page {coveragePage} / {coverageManifest?.pages ?? 1}</span>
+                <button className="button-secondary" disabled={!coverageManifest || coveragePage >= (coverageManifest.pages ?? 1)} onClick={() => setCoveragePage(value => value + 1)}>Next</button>
+              </div>
+            </div>
           </Card>
 
           {/* Semantic Clusters Section */}

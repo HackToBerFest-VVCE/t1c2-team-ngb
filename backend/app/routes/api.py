@@ -458,14 +458,11 @@ def vulnerabilities():
             ids = frame.record_id.astype(str)
             in_sample = ids.isin(sampled_ids)
             frame["ml_sample_membership"] = in_sample.map({True: "IN_SAMPLE", False: "OUTSIDE_SAMPLE"})
-            frame["ml_analysis_status"] = [
-                "ANALYZED" if record_id in assignments else (
-                    "NOT_ANALYZED_BELOW_MINIMUM" if record_id in sampled_ids else (
-                        "NOT_ANALYZED_MISSING_DESCRIPTION" if not has_text else "NOT_ANALYZED_OUTSIDE_SAMPLE"
-                    )
-                )
-                for record_id, has_text in zip(ids, has_description)
-            ]
+            status = pd.Series("NOT_ANALYZED_OUTSIDE_SAMPLE", index=frame.index, dtype="object")
+            status.loc[~has_description] = "NOT_ANALYZED_MISSING_DESCRIPTION"
+            status.loc[in_sample] = "NOT_ANALYZED_BELOW_MINIMUM"
+            status.loc[ids.isin(assignments)] = "ANALYZED"
+            frame["ml_analysis_status"] = status
             frame["cluster"] = frame.record_id.map(lambda record_id: assignments.get(record_id, {}).get("cluster"))
             frame["anomaly_score"] = frame.record_id.map(lambda record_id: assignments.get(record_id, {}).get("anomaly_score"))
 

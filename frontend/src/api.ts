@@ -24,7 +24,7 @@ export interface Vulnerability {
   cluster?: number;
   cvss_indicated_severity?: string | null;
   review_reasons?: string[];
-  review_priority?: 'URGENT_REVIEW' | 'HIGH_REVIEW' | 'VERIFY_SOURCE' | 'MANUAL_REVIEW' | 'REVIEW' | 'VERIFY_SCORE' | 'NO_REVIEW_FLAG';
+  review_priority?: 'URGENT_REVIEW' | 'HIGH_REVIEW' | 'VERIFY_SOURCE' | 'MANUAL_REVIEW' | 'REVIEW' | 'VERIFY_SCORE' | 'VERIFY_CONTEXT' | 'NO_REVIEW_FLAG';
   review_evidence_url?: string;
   affected_product_evidence?: string;
   affected_version_evidence?: string;
@@ -539,15 +539,27 @@ export async function askAdvisorQuestion(
   evidence?: SoftwareAssessmentResponse,
   provider?: string
 ): Promise<AssessmentChatResponse> {
-  return api<AssessmentChatResponse>('/software-assessment/chat', {
-    method: 'POST',
-    body: JSON.stringify({
-      assessment_id: assessmentId,
-      question,
-      evidence,
-      provider,
-    }),
-  });
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), 18_000);
+  try {
+    return await api<AssessmentChatResponse>('/software-assessment/chat', {
+      method: 'POST',
+      signal: controller.signal,
+      body: JSON.stringify({
+        assessment_id: assessmentId,
+        question,
+        evidence,
+        provider,
+      }),
+    });
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error('The AI provider is taking too long. Please retry; the chat will return a local answer when the provider times out.');
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timer);
+  }
 }
 
 export async function downloadAssessmentReport(

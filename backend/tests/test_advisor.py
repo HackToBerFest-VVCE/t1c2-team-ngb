@@ -191,6 +191,32 @@ def test_assessment_insufficient_identification():
     assert res["verdict"] == "INSUFFICIENT_IDENTIFICATION"
 
 
+def test_chat_greeting_returns_immediately_without_provider_call(monkeypatch):
+    from app.services import advisor
+    monkeypatch.setattr(advisor, "_get_ai_credentials", lambda *_: (_ for _ in ()).throw(AssertionError("model should not be called")))
+    result = answer_assessment_follow_up({
+        "software": {"product_name": "cryptography", "version": "41.0.0"},
+        "verdict": "KNOWN_VULNERABILITIES_FOUND",
+        "verified_fixed_version": "42.0.0",
+        "findings": [{"id": "GHSA-example", "severity": "HIGH"}],
+    }, "hi!", provider_pref="nvidia")
+    assert result["provider"] == "threatlens_quick_reply"
+    assert "ThreatLens Security Advisor" in result["answer"]
+
+
+def test_chat_provider_timeout_uses_local_answer_quickly(monkeypatch):
+    from app.services import advisor
+    monkeypatch.setenv("NVIDIA_API_KEY", "test-key")
+    monkeypatch.setenv("ADVISOR_CHAT_TIMEOUT_SECONDS", "6")
+    def timeout(_request, timeout):
+        assert timeout == 6
+        raise TimeoutError("simulated provider timeout")
+    monkeypatch.setattr(advisor, "urlopen", timeout)
+    result = answer_assessment_follow_up({}, "How do I check a package safely?", provider_pref="nvidia")
+    assert result["provider"] == "threatlens_knowledge_engine"
+    assert result["answer"]
+
+
 def test_api_software_assessment_endpoint(client):
     """Test Flask POST /api/software-assessment."""
     payload = {
@@ -207,6 +233,17 @@ def test_api_software_assessment_endpoint(client):
         assert "verdict" in data
         assert "software" in data
         assert data["software"]["product_name"] == "requests"
+
+
+def test_api_chat_greeting_returns_fast_local_response(client):
+    response = client.post("/api/software-assessment/chat", json={
+        "question": "hi",
+        "provider": "nvidia",
+    })
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["provider"] == "threatlens_quick_reply"
+    assert "Security Advisor" in payload["answer"]
 
 
 def test_api_software_assessment_export(client):

@@ -734,6 +734,19 @@ def answer_assessment_follow_up(
         }
 
     question_clean = str(question).strip()
+    # Small-talk should feel immediate and must not consume a model request.
+    greeting = re.sub(r"[^a-z ]", "", question_clean.lower()).strip()
+    if greeting in {"hi", "hello", "hey", "hiya", "good morning", "good afternoon", "good evening"}:
+        return {
+            "answer": (
+                "Hi! I’m the ThreatLens Security Advisor. Ask me about a CVE, a CVSS score, "
+                "a software version, or how to verify a package safely."
+            ),
+            "provider": "threatlens_quick_reply",
+            "model": "local_greeting",
+            "citations": [],
+        }
+
     evidence = evidence or {}
     has_findings = bool(evidence.get("findings"))
 
@@ -825,7 +838,7 @@ def answer_assessment_follow_up(
                 {"role": "user", "content": user_content},
             ],
             "temperature": 0.2,
-            "max_tokens": 1400,
+            "max_tokens": 600,
         }
 
         try:
@@ -839,7 +852,12 @@ def answer_assessment_follow_up(
                 },
                 method="POST",
             )
-            with urlopen(req, timeout=35) as resp:
+            try:
+                timeout = float(os.getenv("ADVISOR_CHAT_TIMEOUT_SECONDS", "12"))
+            except ValueError:
+                timeout = 12.0
+            timeout = min(max(timeout, 3.0), 20.0)
+            with urlopen(req, timeout=timeout) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
                 msg = data["choices"][0]["message"]
                 answer_text = msg.get("content")
