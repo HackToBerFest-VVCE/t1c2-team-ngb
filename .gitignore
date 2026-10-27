@@ -33,3 +33,5 @@ data/full_catalog_metadata.json
 !data/models/training_report.json
 !data/full_catalog_metadata.json
 !data/vulnerabilities.full.parquet
+.vercel
+.env*

@@ -1,5 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "other",
   "buildCommand": "npm --prefix frontend install && npm --prefix frontend run build && node scripts/copy-frontend.mjs",
   "rewrites": [
     {

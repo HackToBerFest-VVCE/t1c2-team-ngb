@@ -15,4 +15,10 @@ data/external/
 data/vulnerabilities.full.json
 data/vulnerabilities.full.json.gz
 data/vulnerabilities.full.parquet
+screenshots/
+deliverables/
+.codex-build/
+.codex-docx-qa/
+.codex-pptx-build/
+.codex-*/
 .git/
