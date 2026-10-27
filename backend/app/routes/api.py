@@ -1047,3 +1047,177 @@ def export_report():
             ),
         },
     )
+
+
+# ── Software Safety Advisor Endpoints ─────────────────────────────────
+
+@api.route("/software-assessment", methods=["POST"])
+def software_assessment():
+    """Run evidence-based software vulnerability risk assessment."""
+    from ..services.advisor import assess_software
+
+    file_bytes = None
+    filename = ""
+
+    if request.is_json:
+        payload = request.get_json(silent=True) or {}
+        product_name = payload.get("product_name") or payload.get("package_name") or ""
+        vendor = payload.get("vendor") or ""
+        version = payload.get("version") or ""
+        ecosystem = payload.get("ecosystem") or "generic"
+        source_url = payload.get("source_url") or ""
+        provider = payload.get("provider") or os.getenv("AI_PROVIDER", "nvidia")
+    else:
+        # Check multipart form
+        product_name = request.form.get("product_name") or request.form.get("package_name") or ""
+        vendor = request.form.get("vendor") or ""
+        version = request.form.get("version") or ""
+        ecosystem = request.form.get("ecosystem") or "generic"
+        source_url = request.form.get("source_url") or ""
+        provider = request.form.get("provider") or os.getenv("AI_PROVIDER", "nvidia")
+
+        if "file" in request.files:
+            uploaded = request.files["file"]
+            if uploaded and uploaded.filename:
+                filename = uploaded.filename
+                # Read max 15MB
+                file_bytes = uploaded.read(15 * 1024 * 1024 + 1)
+                if len(file_bytes) > 15 * 1024 * 1024:
+                    return _error("file_too_large", "Uploaded file exceeds maximum limit of 15MB.", 413)
+
+    try:
+        result = assess_software(
+            product_name=str(product_name)[:128],
+            version=str(version)[:64],
+            vendor=str(vendor)[:128],
+            ecosystem=str(ecosystem)[:32],
+            source_url=str(source_url)[:2048],
+            file_bytes=file_bytes,
+            filename=filename,
+            provider=str(provider)[:32],
+        )
+        return jsonify(result)
+    except Exception as exc:
+        log.exception("Software assessment error")
+        return _error("assessment_failed", f"Assessment failed: {exc}", 500)
+
+
+@api.route("/software-assessment/chat", methods=["POST"])
+def software_assessment_chat():
+    """Context-grounded follow-up chat using assessment evidence."""
+    from ..services.advisor import answer_assessment_follow_up, get_cached_assessment
+
+    payload = request.get_json(silent=True) or {}
+    assessment_id = payload.get("assessment_id") or ""
+    question = payload.get("question") or ""
+    provider = payload.get("provider") or os.getenv("AI_PROVIDER", "nvidia")
+    evidence = payload.get("evidence")
+
+    if not evidence and assessment_id:
+        evidence = get_cached_assessment(assessment_id)
+
+    if not evidence:
+        return _error("assessment_not_found", "No assessment context found. Please run an assessment first.", 404)
+
+    if not question or not str(question).strip():
+        return _error("invalid_question", "Question cannot be empty.", 400)
+
+    try:
+        response = answer_assessment_follow_up(evidence, str(question)[:500], provider_pref=str(provider))
+        return jsonify(response)
+    except Exception as exc:
+        log.exception("Assessment chat error")
+        return _error("chat_failed", f"Failed to answer question: {exc}", 500)
+
+
+@api.route("/software-assessment/export", methods=["POST"])
+def software_assessment_export():
+    """Export software assessment report as JSON, Markdown, or HTML."""
+    from ..services.advisor import get_cached_assessment
+
+    payload = request.get_json(silent=True) or {}
+    assessment_id = payload.get("assessment_id") or ""
+    fmt = (payload.get("format") or "json").lower()
+    data = payload.get("assessment")
+
+    if not data and assessment_id:
+        data = get_cached_assessment(assessment_id)
+
+    if not data:
+        return _error("assessment_not_found", "Assessment record not found for export.", 404)
+
+    prod = data.get("software", {}).get("product_name", "software")
+    safe_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in prod)
+
+    if fmt == "json":
+        return Response(
+            json.dumps(data, indent=2, ensure_ascii=False),
+            mimetype="application/json",
+            headers={"Content-Disposition": f"attachment; filename=threatlens-assessment-{safe_name}.json"},
+        )
+
+    if fmt == "markdown":
+        md = [
+            f"# ThreatLens AI — Software Safety Assessment Report",
+            f"**Assessment ID:** {data.get('assessment_id')}",
+            f"**Generated At:** {data.get('generated_at')}",
+            f"**Product:** {prod} (v{data.get('software', {}).get('version', 'unspecified')})",
+            f"**Ecosystem:** {data.get('software', {}).get('ecosystem')}",
+            f"**Verdict:** {data.get('verdict')} ({data.get('verdict_title')})",
+            f"**Recommended Action:** {data.get('recommendation', {}).get('action')}",
+            f"**Explanation:** {data.get('recommendation', {}).get('explanation')}",
+            f"\n## Executive Summary\n{data.get('ai', {}).get('executive_summary') or data.get('deterministic_summary')}",
+            f"\n## Potential Impacts\n" + "\n".join(f"- {imp}" for imp in data.get("potential_impacts", [])),
+            f"\n## Findings ({len(data.get('findings', []))})\n",
+        ]
+        for f in data.get("findings", [])[:20]:
+            md.append(f"### {f.get('id')} — Severity: {f.get('severity')} (CVSS: {f.get('cvss_score')})")
+            md.append(f"- **Match Type:** {f.get('match_type')}")
+            md.append(f"- **Fixed in:** {f.get('verified_fixed_version') or 'Not specified'}")
+            md.append(f"- **Summary:** {f.get('summary')}")
+            md.append(f"- **Advisory:** {f.get('source_url')}\n")
+
+        return Response(
+            "\n".join(md),
+            mimetype="text/markdown",
+            headers={"Content-Disposition": f"attachment; filename=threatlens-assessment-{safe_name}.md"},
+        )
+
+    # HTML report
+    html = f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>ThreatLens Assessment — {prod}</title>
+<style>
+body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0b0f19; color: #e2e8f0; margin: 40px; }}
+.card {{ background: #131b2e; border: 1px solid #1e293b; border-radius: 8px; padding: 24px; margin-bottom: 20px; }}
+.badge {{ display: inline-block; padding: 4px 10px; border-radius: 9999px; font-weight: bold; font-size: 13px; }}
+.badge-red {{ background: #ef444422; color: #f87171; border: 1px solid #ef444455; }}
+.badge-blue {{ background: #3b82f622; color: #60a5fa; border: 1px solid #3b82f655; }}
+h1, h2, h3 {{ color: #f8fafc; }}
+a {{ color: #38bdf8; }}
+</style>
+</head>
+<body>
+<h1>ThreatLens AI — Software Safety Assessment</h1>
+<div class="card">
+<h2>{prod} v{data.get('software', {}).get('version', 'unspecified')}</h2>
+<span class="badge badge-{'red' if 'KNOWN' in data.get('verdict', '') else 'blue'}">{data.get('verdict')}</span>
+<p><strong>Recommendation:</strong> {data.get('recommendation', {}).get('explanation')}</p>
+<p><strong>Executive Summary:</strong> {data.get('ai', {}).get('executive_summary') or data.get('deterministic_summary')}</p>
+</div>
+<div class="card">
+<h3>Findings ({len(data.get('findings', []))})</h3>
+<ul>
+{''.join(f"<li><strong>{f.get('id')}</strong> ({f.get('severity')}) - {f.get('summary')[:150]}... <a href='{f.get('source_url')}' target='_blank'>Advisory</a></li>" for f in data.get('findings', [])[:25])}
+</ul>
+</div>
+</body>
+</html>"""
+    return Response(
+        html,
+        mimetype="text/html",
+        headers={"Content-Disposition": f"attachment; filename=threatlens-assessment-{safe_name}.html"},
+    )
+

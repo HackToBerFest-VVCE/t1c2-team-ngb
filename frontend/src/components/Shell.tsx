@@ -33,6 +33,7 @@ import {
 const NAV_ITEMS = [
   ['Overview', LayoutDashboard],
   ['Vulnerability Explorer', Search],
+  ['Software Safety Advisor', Shield],
   ['Threat Trends', ChartNoAxesCombined],
   ['CVSS Analysis', ShieldCheck],
   ['ML Insights', Sparkles],
@@ -241,7 +242,7 @@ export function PageHeading({ eyebrow, title, description, action }: PageHeading
 // ─── Card ────────────────────────────────────────────────────────────
 
 interface CardProps {
-  title: string;
+  title?: string;
   subtitle?: string;
   children: ReactNode;
   action?: ReactNode;
@@ -249,15 +250,18 @@ interface CardProps {
 }
 
 export function Card({ title, subtitle, children, action, className = '' }: CardProps) {
+  const hasHead = Boolean(title || subtitle || action);
   return (
     <section className={`card ${className}`}>
-      <div className="card-head">
-        <div>
-          <h2>{title}</h2>
-          {subtitle && <p>{subtitle}</p>}
+      {hasHead && (
+        <div className="card-head">
+          <div>
+            {title && <h2>{title}</h2>}
+            {subtitle && <p>{subtitle}</p>}
+          </div>
+          {action}
         </div>
-        {action}
-      </div>
+      )}
       {children}
     </section>
   );

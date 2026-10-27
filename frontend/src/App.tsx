@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react';
 import { Shell } from './components/Shell';
 import Overview from './pages/Overview';
 import Explorer from './pages/Explorer';
+import Advisor from './pages/Advisor';
 import ProjectStudio from './pages/Projects';
 import {
   Trends,
@@ -25,6 +26,7 @@ import { api, SourceStatus } from './api';
 const PAGES: Record<string, React.FC<any>> = {
   'Overview': Overview,
   'Vulnerability Explorer': Explorer,
+  'Software Safety Advisor': Advisor,
   'Threat Trends': Trends,
   'CVSS Analysis': Risk,
   'ML Insights': ML,

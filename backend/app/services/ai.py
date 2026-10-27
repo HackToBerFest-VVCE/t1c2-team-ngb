@@ -12,10 +12,12 @@ from urllib.request import Request, urlopen
 
 ENDPOINTS = {
     "nvidia": "https://integrate.api.nvidia.com/v1/chat/completions",
+    "deepseek": "https://api.deepseek.com/chat/completions",
 }
 MODELS = {
     "cortex": ("", "llama3.1-8b"),
     "nvidia": ("NVIDIA_API_KEY", "nvidia/nemotron-3.5-lightning-30b-a3b"),
+    "deepseek": ("DEEPSEEK_API_KEY", "deepseek-ai/deepseek-r1"),
 }
 
 
@@ -29,7 +31,7 @@ class AIServiceError(RuntimeError):
 
 def _provider_error(status: int, provider: str) -> AIServiceError:
     """Return a useful, sanitized message without exposing provider bodies."""
-    provider_name = {"nvidia": "NVIDIA NIM", "cortex": "Snowflake Cortex"}.get(provider, "AI provider")
+    provider_name = {"nvidia": "NVIDIA NIM", "cortex": "Snowflake Cortex", "deepseek": "DeepSeek AI"}.get(provider, "AI provider")
     key_name = MODELS.get(provider, MODELS["nvidia"])[0]
     messages = {
         400: ("ai_request_rejected", f"{provider_name} rejected the analysis request. Try a shorter analysis window."),
@@ -119,11 +121,23 @@ def configuration(provider: str | None = None) -> dict:
     key_name, default_model = MODELS[selected]
     api_key = os.getenv(key_name, "").strip()
     configured = bool(api_key)
+    endpoint = ENDPOINTS[selected]
+    if selected == "deepseek":
+        if api_key.startswith("nvapi-") or os.getenv("DEEPSEEK_BASE_URL", "").find("nvidia.com") != -1:
+            endpoint = os.getenv("DEEPSEEK_BASE_URL", "https://integrate.api.nvidia.com/v1/chat/completions")
+            default_model = os.getenv("DEEPSEEK_MODEL", "deepseek-ai/deepseek-r1")
+        else:
+            endpoint = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/chat/completions")
+            default_model = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+    elif selected == "nvidia":
+        endpoint = os.getenv("NVIDIA_BASE_URL", endpoint)
+        default_model = os.getenv("NVIDIA_MODEL", default_model)
+
     return {
         "configured": configured,
         "provider": selected,
         "model": default_model,
-        "endpoint": ENDPOINTS[selected],
+        "endpoint": endpoint,
         "api_key": api_key,
         "key_name": key_name,
     }

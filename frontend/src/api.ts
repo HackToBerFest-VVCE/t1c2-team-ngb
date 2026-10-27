@@ -340,3 +340,185 @@ export async function downloadExport(
   anchor.click();
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+
+// ─── Software Safety Advisor Types & Client ───────────────────────────
+
+export interface SoftwareFinding {
+  id: string;
+  source: string;
+  summary: string;
+  details: string;
+  severity: string;
+  cvss_score: number | null;
+  match_type: 'EXACT' | 'RANGE_MATCH' | 'POTENTIAL' | 'NOT_AFFECTED';
+  range_description: string;
+  verified_fixed_version: string | null;
+  cwe: string;
+  published: string;
+  modified: string;
+  source_url: string;
+  advisories: string[];
+}
+
+export interface SoftwareIdentity {
+  product_name: string;
+  vendor: string;
+  version: string;
+  ecosystem: string;
+  package_name?: string | null;
+  source_url?: string;
+  confidence: 'HIGH' | 'MEDIUM' | 'LOW';
+}
+
+export interface AssessmentRecommendation {
+  action: string;
+  explanation: string;
+}
+
+export interface FileMetadata {
+  filename: string;
+  size_bytes: number;
+  sha256: string;
+  sha1: string;
+  md5: string;
+  detected_type: string;
+  suggested_ecosystem: string;
+  extracted_name?: string | null;
+  extracted_version?: string | null;
+  suspicious_flags: string[];
+  is_executable_binary: boolean;
+  analysis_mode: string;
+  notice: string;
+}
+
+export interface SoftwareAssessmentResponse {
+  assessment_id: string;
+  verdict:
+    | 'KNOWN_VULNERABILITIES_FOUND'
+    | 'POTENTIAL_MATCH_REQUIRES_VERIFICATION'
+    | 'NO_MATCHING_VULNERABILITIES_FOUND'
+    | 'INSUFFICIENT_IDENTIFICATION'
+    | 'FILE_ANALYSIS_INCONCLUSIVE'
+    | 'SUSPICIOUS_INDICATORS_FOUND';
+  verdict_title: string;
+  software: SoftwareIdentity;
+  file_metadata?: FileMetadata | null;
+  findings: SoftwareFinding[];
+  total_findings: number;
+  exact_matches_count: number;
+  potential_matches_count: number;
+  potential_impacts: string[];
+  verified_fixed_version: string | null;
+  recommendation: AssessmentRecommendation;
+  sources_checked: string[];
+  suspicious_indicators?: string[];
+  limitations: string[];
+  deterministic_summary?: string;
+  generated_at: string;
+  duration_ms?: number;
+  ai?: {
+    used: boolean;
+    provider: string;
+    model: string;
+    executive_summary?: string;
+    plain_english_impact?: string;
+    recommended_action?: string;
+    verification_steps?: string[];
+    technical_notes?: string;
+  };
+}
+
+export interface SoftwareAssessmentRequest {
+  product_name?: string;
+  package_name?: string;
+  vendor?: string;
+  version?: string;
+  ecosystem?: string;
+  source_url?: string;
+  provider?: string;
+}
+
+export interface AssessmentChatResponse {
+  answer: string;
+  provider?: string;
+  model?: string;
+  citations?: string[];
+}
+
+export async function runSoftwareAssessment(
+  params: SoftwareAssessmentRequest,
+  file?: File
+): Promise<SoftwareAssessmentResponse> {
+  if (file) {
+    const formData = new FormData();
+    if (params.product_name) formData.append('product_name', params.product_name);
+    if (params.vendor) formData.append('vendor', params.vendor);
+    if (params.version) formData.append('version', params.version);
+    if (params.ecosystem) formData.append('ecosystem', params.ecosystem);
+    if (params.source_url) formData.append('source_url', params.source_url);
+    if (params.provider) formData.append('provider', params.provider);
+    formData.append('file', file);
+
+    const resp = await fetch(`${BASE}/software-assessment`, {
+      method: 'POST',
+      body: formData,
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => null);
+      throw new Error(err?.error?.message ?? 'Assessment request failed');
+    }
+    return resp.json();
+  }
+
+  return api<SoftwareAssessmentResponse>('/software-assessment', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+}
+
+export async function askAdvisorQuestion(
+  assessmentId: string,
+  question: string,
+  evidence?: SoftwareAssessmentResponse,
+  provider?: string
+): Promise<AssessmentChatResponse> {
+  return api<AssessmentChatResponse>('/software-assessment/chat', {
+    method: 'POST',
+    body: JSON.stringify({
+      assessment_id: assessmentId,
+      question,
+      evidence,
+      provider,
+    }),
+  });
+}
+
+export async function downloadAssessmentReport(
+  assessment: SoftwareAssessmentResponse,
+  format: 'json' | 'markdown' | 'html'
+): Promise<void> {
+  const resp = await fetch(`${BASE}/software-assessment/export`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      assessment_id: assessment.assessment_id,
+      assessment,
+      format,
+    }),
+  });
+
+  if (!resp.ok) {
+    throw new Error('Export download failed');
+  }
+
+  const blob = await resp.blob();
+  const ext = format === 'markdown' ? 'md' : format;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const safeName = (assessment.software.product_name || 'software').replace(/[^a-zA-Z0-9-_]/g, '_');
+  a.download = `threatlens-assessment-${safeName}.${ext}`;
+  a.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
