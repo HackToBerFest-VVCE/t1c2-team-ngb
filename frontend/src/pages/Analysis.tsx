@@ -59,6 +59,7 @@ import {
   AIStatus,
   AttackForecastResponse,
   ClustersResponse,
+  MLCoverageResponse,
   HealthResponse,
   RiskResponse,
   SourceStatus,
@@ -629,6 +630,7 @@ export function Risk() {
 
 export function ML() {
   const [clusters, setClusters] = useState<ClustersResponse | null>(null);
+  const [coverageManifest, setCoverageManifest] = useState<MLCoverageResponse | null>(null);
   const [anomalies, setAnomalies] = useState<any>(null);
   const [training, setTraining] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -642,11 +644,13 @@ export function ML() {
       api<ClustersResponse>('/ml/clusters'),
       api<any>('/ml/anomalies'),
       api<any>('/ml/training'),
+      api<MLCoverageResponse>('/ml/coverage?per_page=10'),
     ])
-      .then(([cls, anm, report]) => {
+      .then(([cls, anm, report, coverage]) => {
         setClusters(cls);
         setAnomalies(anm);
         setTraining(report);
+        setCoverageManifest(coverage);
       })
       .catch((err: Error) => {
         setError(err.message || 'Failed to load ML analysis');
@@ -736,13 +740,19 @@ export function ML() {
           <div className="notice blue-notice">
             <Info size={17} />
             <div>
-              <b>Unsupervised Signal Notice (No Ground Truth)</b>
+              <b>K-means coverage and outlier handling</b>
               <span>
-                These clusters and anomaly scores model statistical similarity and distribution deviation.
-                They do not prove active zero-day exploitation or adversarial intent.
+                K-means assigns every record in its modeled sample to a cluster; it does not reject points as outliers. This run clustered {clusters.coverage?.records_assigned_to_kmeans.toLocaleString() ?? '—'} and scored {clusters.coverage?.records_scored_by_isolation_forest.toLocaleString() ?? '—'} with Isolation Forest, from {clusters.coverage?.records_in_deterministic_sample.toLocaleString() ?? '—'} sampled of {clusters.coverage?.eligible_records.toLocaleString() ?? '—'} eligible described records. {clusters.coverage?.records_not_analyzed.toLocaleString() ?? '—'} of {clusters.coverage?.total_active_records.toLocaleString() ?? '—'} active records were not analyzed; {clusters.coverage?.excluded_missing_or_empty_description.toLocaleString() ?? '—'} lack descriptions and {clusters.coverage?.eligible_records_outside_sample.toLocaleString() ?? '—'} eligible records were outside the sample. Isolation Forest decision values rank unusual records; neither model proves safety, exploitability, or severity.
               </span>
             </div>
           </div>
+
+          <Card title="Analyzed sample manifest" subtitle={coverageManifest?.output_meaning ?? 'Only records shown here were clustered and scored. Anomaly decision values are rankings, not exploitation probabilities.'}>
+            <div className="table-wrap"><table><thead><tr><th>STABLE RECORD ID</th><th>CVE</th><th>ML STATUS</th><th>K-MEANS CLUSTER</th><th>ISOLATION FOREST DECISION VALUE</th></tr></thead>
+              <tbody>{coverageManifest?.assignments?.map(item => <tr key={item.record_id}><td className="mono">{item.record_id}</td><td>{item.cve_id}</td><td>ANALYZED · IN SAMPLE</td><td>Pattern {item.cluster + 1}</td><td className="mono">{item.anomaly_score.toFixed(6)}</td></tr>)}
+                {!coverageManifest?.assignments?.length && <tr><td colSpan={5}><div className="empty-row">No records were scored in this run.</div></td></tr>}</tbody>
+            </table></div>
+          </Card>
 
           {/* Semantic Clusters Section */}
           <div className="section-title-wrap">

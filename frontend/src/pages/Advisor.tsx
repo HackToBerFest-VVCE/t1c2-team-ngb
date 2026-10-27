@@ -104,6 +104,63 @@ const PRESET_EXAMPLES = [
   },
 ];
 
+function renderMarkdown(text: string) {
+  const lines = text.split('\n');
+  const elements: React.ReactNode[] = [];
+  let inList = false;
+  let listItems: React.ReactNode[] = [];
+  let listKey = 0;
+
+  const flushList = () => {
+    if (inList && listItems.length > 0) {
+      elements.push(<ul key={`ul-${listKey++}`} style={{ margin: '6px 0 8px 18px', padding: 0 }}>{listItems}</ul>);
+      listItems = [];
+      inList = false;
+    }
+  };
+
+  const parseInline = (line: string): React.ReactNode[] => {
+    const parts = line.split(/(`[^`]+`|\*\*[^*]+\*\*)/g);
+    return parts.map((part, idx) => {
+      if (part.startsWith('`') && part.endsWith('`') && part.length > 2) {
+        return <code key={idx} style={{ background: 'rgba(0,0,0,0.4)', padding: '2px 5px', borderRadius: '4px', fontFamily: 'var(--font-mono)', fontSize: '12px', color: '#92abff' }}>{part.slice(1, -1)}</code>;
+      }
+      if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
+        return <strong key={idx} style={{ color: '#fff' }}>{part.slice(2, -2)}</strong>;
+      }
+      return part;
+    });
+  };
+
+  lines.forEach((line, idx) => {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      flushList();
+      return;
+    }
+
+    if (trimmed.startsWith('### ') || trimmed.startsWith('#### ') || trimmed.startsWith('## ')) {
+      flushList();
+      const title = trimmed.replace(/^#+\s*/, '');
+      elements.push(<h4 key={`h-${idx}`} style={{ margin: '12px 0 6px 0', fontSize: '13px', fontWeight: 700, color: '#f8fafc' }}>{parseInline(title)}</h4>);
+      return;
+    }
+
+    if (trimmed.startsWith('• ') || trimmed.startsWith('- ') || trimmed.startsWith('* ') || /^\d+\.\s/.test(trimmed)) {
+      inList = true;
+      const content = trimmed.replace(/^[•\-*]\s+|\d+\.\s+/, '');
+      listItems.push(<li key={`li-${idx}`} style={{ margin: '4px 0', lineHeight: 1.5 }}>{parseInline(content)}</li>);
+      return;
+    }
+
+    flushList();
+    elements.push(<p key={`p-${idx}`} style={{ margin: '6px 0', lineHeight: 1.6 }}>{parseInline(trimmed)}</p>);
+  });
+
+  flushList();
+  return elements;
+}
+
 export default function Advisor() {
   // Input state
   const [activeTab, setActiveTab] = useState<'software' | 'package' | 'file'>('package');
@@ -196,7 +253,7 @@ export default function Advisor() {
         ...prev,
         {
           sender: 'ai',
-          text: `Error retrieving grounded answer: ${err.message}`,
+          text: `⚠️ **Security Assistant Notice:** ${err.message || 'Unable to complete request'}. Please try asking your question again or specify a software name.`,
         },
       ]);
     } finally {
@@ -962,7 +1019,7 @@ Verified Fixed Version: ${assessment.verified_fixed_version || 'None specified'}
                     </>
                   )}
                 </div>
-                <div style={{ whiteSpace: 'pre-wrap' }}>{msg.text}</div>
+                <div>{renderMarkdown(msg.text)}</div>
                 {msg.citations && msg.citations.length > 0 && (
                   <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: '1px solid rgba(255, 255, 255, 0.1)', fontSize: '11px', color: 'var(--accent-blue)', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px' }}>
                     <span style={{ color: 'var(--text-tertiary)' }}>Citations:</span>

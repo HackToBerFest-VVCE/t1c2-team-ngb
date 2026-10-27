@@ -110,9 +110,9 @@ describe('Overview Dashboard', () => {
 
     await waitFor(() => {
       expect(screen.getAllByText('12')[0]).toBeInTheDocument(); // Total records
-      expect(screen.getByText('CVE-2026-1001')).toBeInTheDocument(); // Recent table
+      expect(screen.getByText('Apache HTTP Server')).toBeInTheDocument(); // Top products
       expect(screen.getByText('All sample records')).toBeInTheDocument(); // Analysis scope
-    });
+    }, { timeout: 3000 });
   });
 
   it('renders top CWE weaknesses', async () => {

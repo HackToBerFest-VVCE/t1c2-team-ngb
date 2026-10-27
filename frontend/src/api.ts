@@ -9,6 +9,7 @@ const BASE = import.meta.env.VITE_API_URL ?? '/api';
 // ─── Types ───────────────────────────────────────────────────────────
 
 export interface Vulnerability {
+  record_id?: string;
   cve_id: string;
   description: string | null;
   published: string | null;
@@ -21,6 +22,18 @@ export interface Vulnerability {
   priority_score: number | null;
   anomaly_score?: number;
   cluster?: number;
+  cvss_indicated_severity?: string | null;
+  review_reasons?: string[];
+  review_priority?: 'URGENT_REVIEW' | 'HIGH_REVIEW' | 'VERIFY_SOURCE' | 'MANUAL_REVIEW' | 'REVIEW' | 'VERIFY_SCORE' | 'NO_REVIEW_FLAG';
+  review_evidence_url?: string;
+  affected_product_evidence?: string;
+  affected_version_evidence?: string;
+  affected_version_evidence_status?: string;
+  advisory_evidence_status?: string;
+  advisory_references?: string[];
+  manual_verification_required?: boolean;
+  ml_analysis_status?: string;
+  ml_sample_membership?: string;
 }
 
 export interface Metrics {
@@ -36,6 +49,17 @@ export interface Metrics {
   top_cwe: { name: string; count: number }[];
   top_products: { name: string; count: number }[];
   analysis_scope: string;
+  review?: {
+    unknown_source_severity: number;
+    unknown_with_critical_cvss: number;
+    unknown_with_high_or_critical_cvss: number;
+    explicit_none_severity: number;
+    missing_cvss: number;
+    missing_severity_and_cvss: number;
+    severity_score_mismatch: number;
+    invalid_cvss: number;
+    needs_review: number;
+  };
 }
 
 export interface PaginatedResponse<T> {
@@ -54,6 +78,7 @@ export interface VulnerabilityFilters {
   min_score?: string;
   max_score?: string;
   cwe?: string;
+  review?: 'needs_review' | 'high_unknown' | 'unscored';
   sort?: 'published' | 'cvss_score' | 'priority_score' | 'severity' | 'cve_id';
   order?: 'asc' | 'desc';
 }
@@ -169,6 +194,36 @@ export interface MLEvaluation {
   limitations: string;
   dataset_size?: number;
   model_sample_size?: number;
+  total_records?: number;
+  eligible_description_count?: number;
+  not_analyzed_count?: number;
+}
+
+export interface MLCoverage {
+  total_active_records: number;
+  records_with_nonempty_descriptions: number;
+  eligible_records: number;
+  records_in_deterministic_sample: number;
+  records_assigned_to_kmeans: number;
+  records_scored_by_isolation_forest: number;
+  excluded_missing_or_empty_description: number;
+  eligible_records_outside_sample: number;
+  sample_records_below_minimum: number;
+  records_not_analyzed: number;
+  coverage_percent_of_active_records: number;
+  coverage_denominator: string;
+  partition_note: string;
+}
+
+export interface MLCoverageResponse {
+  coverage: MLCoverage;
+  evaluation: MLEvaluation;
+  assignments: Array<{ record_id: string; cve_id: string; cluster: number; anomaly_score: number }>;
+  assignment_count: number;
+  page: number;
+  per_page: number;
+  pages: number;
+  output_meaning: string;
 }
 
 export interface ClustersResponse {
@@ -176,6 +231,7 @@ export interface ClustersResponse {
   reason?: string;
   clusters: ClusterInfo[];
   evaluation: MLEvaluation;
+  coverage?: MLCoverage;
 }
 
 export interface AnomaliesResponse {
@@ -183,6 +239,7 @@ export interface AnomaliesResponse {
   reason?: string;
   items: Vulnerability[];
   evaluation: MLEvaluation;
+  coverage?: MLCoverage;
 }
 
 export interface AttackForecastFamily {

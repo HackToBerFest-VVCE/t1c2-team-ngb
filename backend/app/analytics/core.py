@@ -32,11 +32,25 @@ def safe_records(frame: pd.DataFrame) -> list[dict]:
 
 
 def _frame_fingerprint(frame: pd.DataFrame) -> str:
-    """Cheap hash for cache invalidation when the underlying data changes."""
-    key = f"{len(frame)}-{frame.columns.tolist()}"
+    """Cheap snapshot fingerprint; providers replace DataFrames on refresh."""
+    key = f"{id(frame)}-{len(frame)}-{frame.columns.tolist()}"
     if not frame.empty and "cve_id" in frame.columns:
         key += f"-{frame['cve_id'].iloc[0]}-{frame['cve_id'].iloc[-1]}"
     return sha256(key.encode()).hexdigest()[:16]
+
+
+def add_record_ids(frame: pd.DataFrame, *, copy: bool = True) -> pd.DataFrame:
+    """Attach deterministic IDs, disambiguating duplicate source rows."""
+    result = frame.copy() if copy else frame
+    if result.empty:
+        result["record_id"] = pd.Series(dtype=str)
+        return result
+    fields = [name for name in ("cve_id", "source_url", "published", "last_modified", "description") if name in result]
+    identity = result[fields].fillna("").astype(str).agg("\x1f".join, axis=1)
+    fingerprint = identity.map(lambda value: sha256(value.encode("utf-8")).hexdigest()[:24])
+    occurrence = fingerprint.groupby(fingerprint, sort=False).cumcount()
+    result["record_id"] = [f"{key}-{ordinal}" for key, ordinal in zip(fingerprint, occurrence)]
+    return result
 
 
 # ── Priority scoring ─────────────────────────────────────────────────
@@ -80,6 +94,7 @@ def add_priority(frame: pd.DataFrame, *, copy: bool = True) -> pd.DataFrame:
 
     # Vectorised computation — avoids row-by-row apply() on large frames
     now = pd.Timestamp.now(tz="UTC")
+    result["published"] = pd.to_datetime(result["published"], errors="coerce", utc=True)
     has_cvss = result["cvss_score"].notna()
     has_pub = result["published"].notna()
 
@@ -107,6 +122,71 @@ def add_priority(frame: pd.DataFrame, *, copy: bool = True) -> pd.DataFrame:
         ),
     )
     result["priority_score"] = np.round(score, 1)
+    return result
+
+
+def add_severity_review(frame: pd.DataFrame, *, copy: bool = True) -> pd.DataFrame:
+    """Add evidence labels without changing source severity or CVSS."""
+    result = frame.copy() if copy else frame
+    if result.empty:
+        result["cvss_indicated_severity"] = pd.Series(dtype=object)
+        result["review_reasons"] = pd.Series(dtype=object)
+        result["review_priority"] = pd.Series(dtype=object)
+        return result
+
+    score = pd.to_numeric(result["cvss_score"], errors="coerce")
+    source = result["severity"].fillna("").astype(str).str.strip().str.upper()
+    missing_severity = source.isin({"", "UNKNOWN", "UNSPECIFIED", "UNRATED", "N/A", "NONE REPORTED", "NULL", "NAN"})
+    band = pd.Series(pd.NA, index=result.index, dtype="string")
+    band.loc[score.eq(0)] = "NONE"
+    band.loc[score.gt(0) & score.lt(4)] = "LOW"
+    band.loc[score.ge(4) & score.lt(7)] = "MEDIUM"
+    band.loc[score.ge(7) & score.lt(9)] = "HIGH"
+    band.loc[score.ge(9) & score.le(10)] = "CRITICAL"
+    result["cvss_indicated_severity"] = band
+
+    missing_cvss = score.isna()
+    invalid_cvss = score.notna() & ~score.between(0, 10)
+    mismatch = (~missing_severity) & band.notna() & source.isin({"CRITICAL", "HIGH", "MEDIUM", "LOW", "NONE"}) & source.ne(band.fillna(""))
+    description_missing = result.description.fillna("").astype(str).str.strip().eq("") if "description" in result else pd.Series(True, index=result.index)
+    reasons = []
+    priorities = []
+    for idx in result.index:
+        row_reasons = []
+        if missing_severity.loc[idx]:
+            row_reasons.append("Source severity is UNKNOWN or missing")
+        if missing_cvss.loc[idx]:
+            row_reasons.append("Source CVSS score is missing")
+        if mismatch.loc[idx]:
+            row_reasons.append("Source severity conflicts with its CVSS-indicated band")
+        if invalid_cvss.loc[idx]:
+            row_reasons.append("Source CVSS score is outside the valid 0–10 range")
+        if description_missing.loc[idx] and (missing_severity.loc[idx] or missing_cvss.loc[idx] or mismatch.loc[idx]):
+            row_reasons.append("Description missing; impact context is insufficient")
+        reasons.append(row_reasons)
+        if missing_severity.loc[idx] and pd.notna(score.loc[idx]) and score.loc[idx] >= 9:
+            priorities.append("URGENT_REVIEW")
+        elif missing_severity.loc[idx] and pd.notna(score.loc[idx]) and score.loc[idx] >= 7:
+            priorities.append("HIGH_REVIEW")
+        elif mismatch.loc[idx] or invalid_cvss.loc[idx]:
+            priorities.append("VERIFY_SOURCE")
+        elif missing_severity.loc[idx] and missing_cvss.loc[idx]:
+            priorities.append("MANUAL_REVIEW")
+        elif missing_severity.loc[idx]:
+            priorities.append("REVIEW")
+        elif missing_cvss.loc[idx]:
+            priorities.append("VERIFY_SCORE")
+        else:
+            priorities.append("NO_REVIEW_FLAG")
+    result["review_reasons"] = reasons
+    result["review_priority"] = priorities
+    result["review_evidence_url"] = result.get("source_url", pd.Series("", index=result.index)).fillna("").astype(str)
+    result["affected_product_evidence"] = result.get("affected_products", pd.Series("", index=result.index)).fillna("").astype(str)
+    result["affected_version_evidence"] = None
+    result["affected_version_evidence_status"] = "NOT_AVAILABLE_IN_ACTIVE_SCHEMA"
+    result["advisory_evidence_status"] = "NOT_QUERIED"
+    result["advisory_references"] = [[] for _ in range(len(result))]
+    result["manual_verification_required"] = result.review_priority.ne("NO_REVIEW_FLAG")
     return result
 
 
@@ -164,6 +244,22 @@ def metrics(frame: pd.DataFrame) -> dict[str, Any]:
     if not frame.empty and frame.cvss_score.notna().any():
         avg_cvss = round(float(frame.cvss_score.dropna().mean()), 1)
 
+    annotated = add_severity_review(frame)
+    reasons = annotated["review_reasons"]
+    normalized_severity = annotated.severity.fillna("").astype(str).str.strip().str.upper()
+    unknown = normalized_severity.isin({"", "UNKNOWN", "UNSPECIFIED", "UNRATED", "N/A", "NONE REPORTED", "NULL", "NAN"})
+    indicated = annotated.cvss_indicated_severity
+    review = {
+        "unknown_source_severity": int(unknown.sum()),
+        "explicit_none_severity": int(normalized_severity.eq("NONE").sum()),
+        "unknown_with_critical_cvss": int((unknown & indicated.eq("CRITICAL").fillna(False)).sum()),
+        "unknown_with_high_or_critical_cvss": int((unknown & indicated.isin(["HIGH", "CRITICAL"])).sum()),
+        "missing_cvss": int(annotated.cvss_score.isna().sum()),
+        "missing_severity_and_cvss": int((unknown & annotated.cvss_score.isna()).sum()),
+        "severity_score_mismatch": int(sum(any("conflicts" in reason for reason in item) for item in reasons)),
+        "invalid_cvss": int((annotated.cvss_score.notna() & ~annotated.cvss_score.between(0, 10)).sum()),
+        "needs_review": int(sum(bool(item) for item in reasons)),
+    }
     res = {
         "total": int(len(frame)),
         "critical": int(sev.get("CRITICAL", 0)),
@@ -190,6 +286,7 @@ def metrics(frame: pd.DataFrame) -> dict[str, Any]:
             "otherwise the starter snapshot). New publications use a "
             "rolling 30-day UTC window."
         ),
+        "review": review,
     }
     _metrics_cache[cache_key] = res
     if len(_metrics_cache) > 8:
@@ -225,6 +322,8 @@ def ml_results(frame: pd.DataFrame) -> dict[str, Any]:
 
 def _compute_ml(frame: pd.DataFrame) -> dict[str, Any]:
     """Core ML computation — deterministic with random_state=42."""
+    total_records = len(frame)
+    frame = add_record_ids(frame)
     usable = frame.dropna(subset=["description"]).copy()
     usable = usable[usable.description.astype(str).str.strip().ne("")]
 
@@ -233,6 +332,30 @@ def _compute_ml(frame: pd.DataFrame) -> dict[str, Any]:
     dataset_size = len(usable)
     if dataset_size > 5000:
         usable = usable.sample(n=5000, random_state=42).sort_index()
+
+    sample_candidate_count = len(usable)
+    no_description_count = total_records - dataset_size
+    outside_sample_count = dataset_size - sample_candidate_count
+
+    def coverage(analyzed_count: int) -> dict[str, Any]:
+        # Partition: no-description + outside-sample + in-sample analyzed +
+        # in-sample below-minimum = total. The latter only occurs <4 rows.
+        below_minimum_count = sample_candidate_count if analyzed_count == 0 else 0
+        return {
+            "total_active_records": int(total_records),
+            "records_with_nonempty_descriptions": int(dataset_size),
+            "eligible_records": int(dataset_size),
+            "records_in_deterministic_sample": int(sample_candidate_count),
+            "records_assigned_to_kmeans": int(analyzed_count),
+            "records_scored_by_isolation_forest": int(analyzed_count),
+            "excluded_missing_or_empty_description": int(no_description_count),
+            "eligible_records_outside_sample": int(outside_sample_count),
+            "sample_records_below_minimum": int(below_minimum_count),
+            "records_not_analyzed": int(total_records - analyzed_count),
+            "coverage_percent_of_active_records": round(analyzed_count * 100 / total_records, 2) if total_records else 0.0,
+            "coverage_denominator": "all active non-rejected records loaded from the configured provider",
+            "partition_note": "Counts in the three exclusion categories are non-overlapping: missing/empty description, eligible but outside sample, and in-sample below the four-record model minimum. Analyzed records are represented by the K-means and Isolation Forest counts.",
+        }
 
     if len(usable) < 4:
         return {
@@ -243,9 +366,16 @@ def _compute_ml(frame: pd.DataFrame) -> dict[str, Any]:
             ),
             "clusters": [],
             "anomalies": [],
+            "assignments": [],
+            "sample_record_ids": usable.record_id.astype(str).tolist(),
             "evaluation": {
                 "baseline": "No model; dataset below minimum size.",
+                "total_records": int(total_records),
+                "eligible_description_count": int(dataset_size),
+                "model_sample_size": 0,
+                "not_analyzed_count": int(total_records),
             },
+            "coverage": coverage(0),
         }
 
     # ── TF-IDF vectorisation ──────────────────────────────────────────
@@ -299,9 +429,15 @@ def _compute_ml(frame: pd.DataFrame) -> dict[str, Any]:
     raw = model.decision_function(features)
 
     out = usable.copy()
+    if "cve_id" not in out.columns:
+        out["cve_id"] = [f"ROW-{i}" for i in range(len(out))]
+    if "record_id" not in out.columns:
+        out["record_id"] = out["cve_id"]
     out["anomaly_score"] = raw
     out["cluster"] = labels
     anomalies = safe_records(out.sort_values("anomaly_score").head(10))
+    assignment_cols = [c for c in ["record_id", "cve_id", "cluster", "anomaly_score"] if c in out.columns]
+    assignments = safe_records(out[assignment_cols])
 
     return {
         "available": True,
@@ -326,6 +462,9 @@ def _compute_ml(frame: pd.DataFrame) -> dict[str, Any]:
             ),
             "dataset_size": int(dataset_size),
             "model_sample_size": int(len(usable)),
+            "total_records": int(total_records),
+            "eligible_description_count": int(dataset_size),
+            "not_analyzed_count": int(total_records - len(usable)),
             "anomaly_method": (
                 "Isolation Forest (100 trees, random_state=42), TF-IDF "
                 "plus median-imputed CVSS; lower decision score = more "
@@ -336,4 +475,7 @@ def _compute_ml(frame: pd.DataFrame) -> dict[str, Any]:
                 "exploitation or malicious activity."
             ),
         },
+        "assignments": assignments,
+        "sample_record_ids": usable.record_id.astype(str).tolist(),
+        "coverage": coverage(len(usable)),
     }

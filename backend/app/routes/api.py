@@ -7,6 +7,7 @@ elsewhere.  No user-supplied SQL is executed.
 
 import json
 import logging
+import os
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -17,10 +18,11 @@ import pandas as pd
 from flask import Blueprint, Response, jsonify, request
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from ..analytics.core import add_priority, metrics, ml_results, safe_records
+from ..analytics.core import add_priority, add_record_ids, add_severity_review, metrics, ml_results, safe_records
 from ..services.ai import AIServiceError, MODELS, analyze, analyze_locally, configuration, provider_options, select_cve_examples
 from ..services.forecast import HORIZONS, add_cortex_interpretation, build_forecast
 from ..services.provider import ProviderError, get_provider, get_records, mode
+from ..services.evidence import lookup_official_evidence
 from ..services.projects import project_catalog
 from ..services.audit import AuditUnavailable, append_event, audit_configured, list_events, summarize_events
 
@@ -55,13 +57,16 @@ def _records():
     raw_id = id(raw)
     if _PRIORITY_CACHE is not None and _PRIORITY_CACHE[0] == raw_id:
         return _PRIORITY_CACHE[1]
-    scored = add_priority(raw, copy=False)
+    identified = add_record_ids(raw, copy=False)
+    scored = add_priority(identified, copy=False)
     _PRIORITY_CACHE = (raw_id, scored)
     return scored
 
 
 def _public_rows(frame: pd.DataFrame) -> list[dict]:
     """Serialise a DataFrame to JSON-safe dicts."""
+    if {"severity", "cvss_score"}.issubset(frame.columns):
+        frame = add_severity_review(frame)
     out = safe_records(frame)
     for row in out:
         for key, val in list(row.items()):
@@ -292,7 +297,7 @@ def vulnerabilities():
         # sorting hundreds of thousands of rows inside a serverless request.
         q = request.args.get("q", "").strip()
         has_filters = any(request.args.get(key) for key in (
-            "q", "severity", "from", "to", "min_score", "max_score", "cwe"
+            "q", "severity", "from", "to", "min_score", "max_score", "cwe", "review"
         ))
         sort = request.args.get("sort", "severity")
         order = request.args.get("order", "desc").lower()
@@ -328,6 +333,7 @@ def vulnerabilities():
                         .str.upper().replace({"": "UNKNOWN"})
                     )
                     page_frame["cve_id"] = page_frame["cve_id"].fillna("").astype("string[pyarrow]").str.upper()
+                    page_frame = add_record_ids(page_frame, copy=False)
                     page_frame = add_priority(page_frame, copy=False)
                 return jsonify({
                     "items": _public_rows(page_frame),
@@ -428,6 +434,41 @@ def vulnerabilities():
                 .str.contains(cwe, case=False, regex=False)
             ]
 
+        review = request.args.get("review", "").strip().lower()
+        if review:
+            if review not in {"needs_review", "high_unknown", "unscored"}:
+                return _error("invalid_parameter", "review must be needs_review, high_unknown, or unscored.", 400)
+            reviewed = add_severity_review(frame)
+            reasons = reviewed["review_reasons"]
+            unknown = reviewed.severity.fillna("").astype(str).str.strip().str.upper().isin({"", "UNKNOWN", "UNSPECIFIED", "UNRATED", "N/A", "NONE REPORTED", "NULL", "NAN"})
+            if review == "needs_review":
+                frame = reviewed[[bool(item) for item in reasons]]
+            elif review == "high_unknown":
+                frame = reviewed[unknown & reviewed.cvss_indicated_severity.isin(["HIGH", "CRITICAL"])]
+            else:
+                frame = reviewed[reviewed.cvss_score.isna()]
+
+            # Link current review records to this run's sample without
+            # implying that out-of-sample records were analyzed.
+            ml = ml_results(_records())
+            assignments = {row["record_id"]: row for row in ml.get("assignments", [])}
+            sampled_ids = set(ml.get("sample_record_ids", []))
+            has_description = frame.description.fillna("").astype(str).str.strip().ne("")
+            frame = frame.copy()
+            ids = frame.record_id.astype(str)
+            in_sample = ids.isin(sampled_ids)
+            frame["ml_sample_membership"] = in_sample.map({True: "IN_SAMPLE", False: "OUTSIDE_SAMPLE"})
+            frame["ml_analysis_status"] = [
+                "ANALYZED" if record_id in assignments else (
+                    "NOT_ANALYZED_BELOW_MINIMUM" if record_id in sampled_ids else (
+                        "NOT_ANALYZED_MISSING_DESCRIPTION" if not has_text else "NOT_ANALYZED_OUTSIDE_SAMPLE"
+                    )
+                )
+                for record_id, has_text in zip(ids, has_description)
+            ]
+            frame["cluster"] = frame.record_id.map(lambda record_id: assignments.get(record_id, {}).get("cluster"))
+            frame["anomaly_score"] = frame.record_id.map(lambda record_id: assignments.get(record_id, {}).get("anomaly_score"))
+
         # ── Sorting ───────────────────────────────────────────────────
         sort_columns = [sort]
         ascending = [order == "asc"]
@@ -498,6 +539,15 @@ def vulnerability(cve_id: str):
         return _error("not_found", "Vulnerability not found.", 404)
 
     return jsonify(_public_rows(match.head(1))[0])
+
+
+@api.get("/evidence/<cve_id>")
+def official_evidence(cve_id: str):
+    """Explicitly request optional official NVD/vendor evidence lookup."""
+    if len(cve_id) > 64 or not cve_id.upper().startswith("CVE-"):
+        return _error("invalid_parameter", "Invalid CVE identifier.", 400)
+    result = lookup_official_evidence(cve_id.upper())
+    return jsonify({"cve_id": cve_id.upper(), **result})
 
 
 # ── Trends ────────────────────────────────────────────────────────────
@@ -777,6 +827,7 @@ def clusters():
         "reason": r.get("reason"),
         "clusters": r["clusters"],
         "evaluation": r["evaluation"],
+        "coverage": r["coverage"],
     })
 
 
@@ -795,6 +846,30 @@ def anomalies():
         "reason": r.get("reason"),
         "items": items,
         "evaluation": r["evaluation"],
+        "coverage": r["coverage"],
+    })
+
+
+@api.get("/ml/coverage")
+def ml_coverage():
+    """Coverage counts and a paginated, stable-ID manifest for this ML run."""
+    try:
+        page = max(1, int(request.args.get("page", "1")))
+        per_page = max(1, min(100, int(request.args.get("per_page", "25"))))
+    except ValueError:
+        return _error("invalid_parameter", "page and per_page must be integers.", 400)
+    result = ml_results(_records())
+    rows = result.get("assignments", [])
+    start = (page - 1) * per_page
+    return jsonify({
+        "coverage": result["coverage"],
+        "evaluation": result["evaluation"],
+        "assignments": rows[start:start + per_page],
+        "page": page,
+        "per_page": per_page,
+        "assignment_count": len(rows),
+        "pages": max(1, (len(rows) + per_page - 1) // per_page),
+        "output_meaning": "An assignment row exists only for a record actually included in this fitted sample and scored by both current models. Absence from this manifest means not analyzed in this run, not safe or anomalous.",
     })
 
 
@@ -942,6 +1017,7 @@ class ExportRequest(BaseModel):
     min_score: float | None = Field(default=None, ge=0, le=10)
     max_score: float | None = Field(default=None, ge=0, le=10)
     cwe: str | None = Field(default=None, max_length=100)
+    review: Literal["needs_review", "high_unknown", "unscored"] | None = None
     sort: Literal["published", "cvss_score", "priority_score", "severity", "cve_id"] = "published"
     order: Literal["asc", "desc"] = "desc"
 
@@ -1001,6 +1077,16 @@ def export_report():
         frame = frame[frame.cvss_score <= body.max_score]
     if body.cwe:
         frame = frame[frame.cwe.fillna("").astype(str).str.contains(body.cwe, case=False, regex=False)]
+    if body.review:
+        reviewed = add_severity_review(frame)
+        reasons = reviewed["review_reasons"]
+        unknown = reviewed.severity.fillna("").astype(str).str.strip().str.upper().isin({"", "UNKNOWN", "UNSPECIFIED", "UNRATED", "N/A", "NONE REPORTED", "NULL", "NAN"})
+        if body.review == "needs_review":
+            frame = reviewed[[bool(item) for item in reasons]]
+        elif body.review == "high_unknown":
+            frame = reviewed[unknown & reviewed.cvss_indicated_severity.isin(["HIGH", "CRITICAL"])]
+        else:
+            frame = reviewed[reviewed.cvss_score.isna()]
     if body.sort == "severity":
         rank = frame["severity"].map({"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "NONE": 4, "UNKNOWN": 5})
         frame = frame.assign(_severity_rank=rank).sort_values(

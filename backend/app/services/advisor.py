@@ -598,99 +598,277 @@ def generate_grounded_ai_summary(evidence: dict[str, Any], provider_pref: str | 
         }
 
 
+def _generate_knowledge_fallback(question: str, evidence: dict[str, Any] | None = None) -> str:
+    """Generate an authoritative, structured security advisory response when external AI is offline."""
+    q_lower = (question or "").lower().strip()
+    evidence = evidence or {}
+    findings = evidence.get("findings", [])
+    product = evidence.get("product_name") or evidence.get("software", {}).get("product_name")
+
+    # If there is active assessment evidence with findings and user asks about it:
+    if findings and product:
+        top_findings = findings[:5]
+        findings_bullets = "\n".join(
+            f"- **{f.get('id')}** ({f.get('severity', 'UNKNOWN')}, CVSS {f.get('cvss_score', 'N/A')}): {f.get('summary', '')[:140]}..."
+            for f in top_findings
+        )
+        fixed_ver = evidence.get("verified_fixed_version") or "Refer to vendor advisory"
+        verdict = evidence.get("verdict", "VULNERABILITIES_FOUND")
+        return (
+            f"### Assessment Context for {product}\n\n"
+            f"**Current Status:** `{verdict}`\n"
+            f"**Verified Fixed Version:** `{fixed_ver}`\n\n"
+            f"#### Identified Vulnerability Records:\n{findings_bullets}\n\n"
+            f"**Security Guidance:**\n"
+            f"- Upgrade immediately to `{fixed_ver}` or higher to remediate the disclosed flaws.\n"
+            f"- Verify package hashes and signatures against official repository releases before deploying.\n"
+            f"- Check application configurations to disable affected features if upgrading cannot be done immediately."
+        )
+
+    # Greetings
+    if q_lower in ("hi", "hello", "hey", "help", "who are you", "what can you do"):
+        return (
+            "👋 **Hello! I am your ThreatLens AI Software Safety Assistant.**\n\n"
+            "I help security teams and developers evaluate software, APKs, libraries, and packages before installation:\n\n"
+            "• **Identify Known CVEs:** Check software against National Vulnerability Database (NVD) and Open Source Vulnerabilities (OSV).\n"
+            "• **Analyze Severity:** Interpret CVSS v3.1/v4.0 scores, attack vectors, and exploit likelihood.\n"
+            "• **Find Safe Versions:** Pinpoint verified fixed releases and upgrade paths.\n"
+            "• **Pre-Installation Guidance:** Advise on package integrity, provenance, and supply chain controls.\n\n"
+            "💡 *Tip: You can ask any security question directly, or enter a package name above and click **Assess Software Risk** to ground our analysis in live vulnerability data.*"
+        )
+
+    # Package CVE check questions
+    if any(k in q_lower for k in ("how do i check", "check if my package", "check cve", "find cve", "known cve", "has cve")):
+        return (
+            "### How to Check if Your Package Has Known CVEs\n\n"
+            "To audit a software package or dependency for known vulnerabilities, use these standard industry practices:\n\n"
+            "1. **ThreatLens AI Assessment (Fastest):**\n"
+            "   - Enter the package name (e.g., `cryptography`, `express`, `requests`) in the search box above.\n"
+            "   - Select the ecosystem (`PyPI`, `npm`, `Maven`, etc.) and version, then click **Assess Software Risk**.\n"
+            "   - ThreatLens queries Snowflake CVE records, NVD, and OSV to verify known vulnerabilities and recommend safe patch versions.\n\n"
+            "2. **Native Ecosystem CLI Scanners:**\n"
+            "   - **Python:** Run `pip-audit` or `safety check`\n"
+            "   - **Node.js / JS:** Run `npm audit` or `pnpm audit`\n"
+            "   - **Rust:** Run `cargo audit`\n"
+            "   - **Go:** Run `govulncheck ./...`\n"
+            "   - **Java / JVM:** Run `mvn dependency-check:check` or OWASP Dependency-Check\n\n"
+            "3. **Generate an SBOM & Scan Continuously:**\n"
+            "   - Use tools like **Syft** or **CycloneDX** to export a Software Bill of Materials (SBOM).\n"
+            "   - Scan the SBOM against **Grype** or **Trivy** to alert whenever new CVEs are disclosed.\n\n"
+            "4. **Integrate into CI/CD:**\n"
+            "   - Add automated PR checks (e.g. GitHub Dependabot, Renovate) to block pull requests containing Critical or High CVEs."
+        )
+
+    # CVSS questions
+    if any(k in q_lower for k in ("cvss score", "cvss 9.8", "9.8 mean", "cvss")):
+        return (
+            "### Understanding CVSS Scores & What 9.8 Means\n\n"
+            "The **Common Vulnerability Scoring System (CVSS)** provides a numerical score from 0.0 to 10.0 reflecting technical severity:\n\n"
+            "| Range | Severity Level | Action Required |\n"
+            "| :--- | :--- | :--- |\n"
+            "| **9.0 – 10.0** | **CRITICAL** | Emergency remediation (patch or isolate immediately) |\n"
+            "| **7.0 – 8.9** | **HIGH** | High-priority patching within hours or days |\n"
+            "| **4.0 – 6.9** | **MEDIUM** | Scheduled maintenance window patching |\n"
+            "| **0.1 – 3.9** | **LOW** | Minor risk, routine review |\n\n"
+            "#### Breakdown of a 9.8 CVSS Score:\n"
+            "A **9.8** rating (CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H) represents one of the most dangerous flaw profiles:\n"
+            "• **AV:N (Network):** Remotely exploitable over the public internet.\n"
+            "• **AC:L (Low Complexity):** No specialized timing or configuration needed.\n"
+            "• **PR:N (None):** No login credentials or authorization required.\n"
+            "• **UI:N (None):** Exploitation occurs without human/user interaction.\n"
+            "• **C:H / I:H / A:H (High Impact):** Full loss of Confidentiality, Integrity, and Availability (e.g. unauthenticated Remote Code Execution or root compromise)."
+        )
+
+    # Third-party verification checklist
+    if any(k in q_lower for k in ("verify before installing", "third-party", "checklist", "supply chain", "before install")):
+        return (
+            "### Pre-Installation Software & Package Verification Checklist\n\n"
+            "Before introducing any new third-party software, library, or installer into your development or production environment:\n\n"
+            "1. **Check Vulnerability History (CVEs):**\n"
+            "   - Verify past CVE disclosures and how quickly maintainers issue security patches.\n"
+            "   - Ensure the current version has zero unpatched Critical or High vulnerabilities.\n\n"
+            "2. **Confirm Provenance & Maintainer Reputation:**\n"
+            "   - Verify that the package originates from the genuine, verified namespace (avoid typosquatting such as `reqeusts` vs `requests`).\n"
+            "   - Inspect repository commit history, release cadence, and multiple active maintainers.\n\n"
+            "3. **Validate Cryptographic Hashes & Signatures:**\n"
+            "   - Compare SHA-256 hashes against published publisher checksums.\n"
+            "   - Where available, verify SLSA provenance or Sigstore cosign signatures.\n\n"
+            "4. **Audit Dependencies & Permissions:**\n"
+            "   - Inspect install scripts (`setup.py`, `postinstall` in `package.json`) for suspicious network calls or environment extraction.\n"
+            "   - Minimize granted permissions (e.g. prevent unnecessary file system or network access).\n\n"
+            "5. **Test in Isolation:**\n"
+            "   - Deploy initially in an isolated container or staging sandbox before installing on developer workstations or production clusters."
+        )
+
+    # OpenSSL or specific crypto packages
+    if "openssl" in q_lower:
+        return (
+            "### Security Overview for OpenSSL\n\n"
+            "OpenSSL is a foundational cryptographic library. Key security considerations include:\n\n"
+            "• **Version Lifecycle:** Legacy versions (1.0.x and 1.1.0/1.1.1) have reached End-of-Life (EOL) and no longer receive security patches.\n"
+            "• **OpenSSL 3.0 Series:** OpenSSL 3.0.x is a Long-Term Support (LTS) release, but early versions had notable vulnerabilities (e.g. CVE-2022-3602, CVE-2022-3786 buffer overflows, CVE-2023-0286).\n"
+            "• **Recommendation:** Maintain OpenSSL at the latest patch level within your active branch (e.g., 3.0.15+, 3.1.7+, 3.2.3+, or 3.3.2+). Always link dynamically where possible to allow rapid host-level patching."
+        )
+
+    # Generic cybersecurity question fallback
+    return (
+        f"### ThreatLens AI Security Advisory\n\n"
+        f"Regarding your query: *\"{question.strip()}\"*\n\n"
+        f"**Defensive Recommendations:**\n"
+        f"1. **Evidence Verification:** Always verify specific software versions against official advisories (NVD, OSV, GitHub Advisory Database, vendor security bulletins).\n"
+        f"2. **Least Privilege & Isolation:** Run software with the lowest required permissions; restrict outbound network egress from build and runtime environments.\n"
+        f"3. **Automated Auditing:** Incorporate automated dependency scanning into every CI/CD pipeline stage.\n"
+        f"4. **Patch Cadence:** Prioritize immediate mitigation for remote code execution, SQL injection, and authentication bypass vulnerabilities.\n\n"
+        f"💡 *To check a specific software or library, enter its name and version in the search bar above to generate a full evidence-backed vulnerability report.*"
+    )
+
+
 def answer_assessment_follow_up(
     evidence: dict[str, Any] | None, question: str, provider_pref: str | None = None
 ) -> dict[str, Any]:
     """Answer a user follow-up question strictly grounded in assessment evidence, or general cybersecurity Q&A."""
-    if not question or not question.strip():
-        return {"answer": "Please ask a specific question regarding software security or vulnerability assessment.", "citations": []}
-
-    cfg = _get_ai_credentials(provider_pref)
-    if not cfg["key"]:
+    if not question or not str(question).strip():
         return {
-            "answer": "AI provider is not configured. To enable interactive Q&A, configure NVIDIA_API_KEY or DEEPSEEK_API_KEY in the backend environment.",
+            "answer": "Please ask a specific question regarding software security or vulnerability assessment.",
             "citations": [],
         }
 
+    question_clean = str(question).strip()
     evidence = evidence or {}
     has_findings = bool(evidence.get("findings"))
 
-    if has_findings:
-        compact_evidence = {
-            "product": evidence.get("product_name") or evidence.get("software", {}).get("product_name"),
-            "version": evidence.get("version") or evidence.get("software", {}).get("version"),
-            "ecosystem": evidence.get("ecosystem") or evidence.get("software", {}).get("ecosystem"),
-            "verdict": evidence.get("verdict"),
-            "fixed_version": evidence.get("verified_fixed_version"),
-            "impacts": evidence.get("potential_impacts"),
-            "findings": [
-                {
-                    "id": f.get("id"),
-                    "severity": f.get("severity"),
-                    "cvss_score": f.get("cvss_score"),
-                    "fixed_version": f.get("verified_fixed_version"),
-                    "summary": f.get("summary"),
-                    "source_url": f.get("source_url"),
+    # Resolve AI provider
+    cfg = _get_ai_credentials(provider_pref)
+    nvidia_key = os.getenv("NVIDIA_API_KEY", "").strip()
+
+    # NVIDIA NIM provides conversational chat completions; prefer it whenever key is present
+    if (not cfg.get("key") or cfg.get("provider") == "cortex") and nvidia_key:
+        cfg = {
+            "provider": "nvidia",
+            "key": nvidia_key,
+            "endpoint": os.getenv("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1/chat/completions"),
+            "model": os.getenv("NVIDIA_MODEL", "nvidia/nemotron-3.5-lightning-30b-a3b"),
+            "is_nvidia_nim": True,
+        }
+
+    # If Cortex is selected and NVIDIA key is not configured, try Snowflake Cortex
+    if cfg.get("provider") == "cortex":
+        try:
+            from .provider import get_provider
+            prov = get_provider()
+            prompt = (
+                f"You are ThreatLens AI Security Advisor. Answer this software security question in plain English with actionable advice:\n"
+                f"User Question: {question_clean}"
+            )
+            answer_text = prov.cortex_complete(prompt, cfg.get("model", "llama3.1-8b"))
+            # Ensure it is a genuine response and not echoing the prompt
+            if (
+                answer_text
+                and len(answer_text.strip()) > 30
+                and not answer_text.strip().startswith("You are ThreatLens AI Security Advisor")
+            ):
+                return {
+                    "answer": answer_text,
+                    "provider": "cortex",
+                    "model": cfg.get("model", "llama3.1-8b"),
+                    "citations": [],
                 }
-                for f in evidence.get("findings", [])[:8]
-            ],
-        }
+        except Exception as cortex_err:
+            log.warning("Cortex follow-up chat error (%s), attempting fallback", cortex_err)
 
-        system_instruction = (
-            "You are ThreatLens AI Security Advisor answering follow-up questions about a specific software vulnerability assessment. "
-            "STRICT GROUNDING RULES:\n"
-            "1. Base your answer EXCLUSIVELY on the provided assessment evidence JSON.\n"
-            "2. Do not invent any CVE numbers, CVSS scores, exploit payloads, or hypothetical vulnerabilities not in evidence.\n"
-            "3. If the answer cannot be determined from the evidence, state clearly: 'The current vulnerability evidence does not contain this information.'\n"
-            "4. Always mention the specific CVE or OSV ID when referencing findings.\n"
-            "5. Keep responses concise, objective, and actionable."
-        )
-        user_content = f"Assessment Evidence:\n{json.dumps(compact_evidence)}\n\nUser Question: {question.strip()}"
-    else:
-        system_instruction = (
-            "You are ThreatLens AI Software Safety Advisor, an authoritative cybersecurity expert. "
-            "Help the user understand software vulnerabilities, common weaknesses, package security best practices, "
-            "and CVE remediation in plain English. State practical guidance and advise verification against official vendor advisories."
-        )
-        user_content = question.strip()
-        compact_evidence = {"findings": []}
-
-    body = {
-        "model": cfg["model"],
-        "messages": [
-            {"role": "system", "content": system_instruction},
-            {"role": "user", "content": f"Assessment Evidence:\n{json.dumps(compact_evidence)}\n\nUser Question: {question.strip()}"},
-        ],
-        "temperature": 0.2,
-        "max_tokens": 600,
-    }
-
-    try:
-        req = Request(
-            cfg["endpoint"],
-            data=json.dumps(body).encode("utf-8"),
-            headers={
-                "Authorization": f"Bearer {cfg['key']}",
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-            },
-            method="POST",
-        )
-        with urlopen(req, timeout=25) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            answer_text = data["choices"][0]["message"]["content"]
-            citations = [f["id"] for f in compact_evidence["findings"] if f["id"] in answer_text]
-            return {
-                "answer": answer_text,
-                "provider": cfg["provider"],
-                "model": cfg["model"],
-                "citations": citations,
+    # If we have an AI API key (NVIDIA NIM or DeepSeek):
+    if cfg.get("key"):
+        if has_findings:
+            compact_evidence = {
+                "product": evidence.get("product_name") or evidence.get("software", {}).get("product_name"),
+                "version": evidence.get("version") or evidence.get("software", {}).get("version"),
+                "ecosystem": evidence.get("ecosystem") or evidence.get("software", {}).get("ecosystem"),
+                "verdict": evidence.get("verdict"),
+                "fixed_version": evidence.get("verified_fixed_version"),
+                "impacts": evidence.get("potential_impacts"),
+                "findings": [
+                    {
+                        "id": f.get("id"),
+                        "severity": f.get("severity"),
+                        "cvss_score": f.get("cvss_score"),
+                        "fixed_version": f.get("verified_fixed_version"),
+                        "summary": f.get("summary"),
+                        "source_url": f.get("source_url"),
+                    }
+                    for f in evidence.get("findings", [])[:8]
+                ],
             }
-    except Exception as exc:
-        return {
-            "answer": f"Unable to generate response from AI provider ({type(exc).__name__}). Please check the source records directly.",
-            "citations": [],
+
+            system_instruction = (
+                "You are ThreatLens AI Security Advisor answering follow-up questions about a specific software vulnerability assessment. "
+                "STRICT GROUNDING RULES:\n"
+                "1. Base your answer EXCLUSIVELY on the provided assessment evidence JSON.\n"
+                "2. Do not invent any CVE numbers, CVSS scores, exploit payloads, or hypothetical vulnerabilities not in evidence.\n"
+                "3. If the answer cannot be determined from the evidence, state clearly: 'The current vulnerability evidence does not contain this information.'\n"
+                "4. Always mention the specific CVE or OSV ID when referencing findings.\n"
+                "5. Keep responses concise, objective, and actionable."
+            )
+            user_content = f"Assessment Evidence:\n{json.dumps(compact_evidence)}\n\nUser Question: {question_clean}"
+        else:
+            compact_evidence = {"findings": []}
+            system_instruction = (
+                "You are ThreatLens AI Software Safety Advisor, an authoritative cybersecurity expert. "
+                "Help the user understand software vulnerabilities, common weaknesses, package security best practices, "
+                "and CVE remediation in plain English. State practical guidance and advise verification against official vendor advisories."
+            )
+            user_content = question_clean
+
+        body = {
+            "model": cfg["model"],
+            "messages": [
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": user_content},
+            ],
+            "temperature": 0.2,
+            "max_tokens": 1400,
         }
+
+        try:
+            req = Request(
+                cfg["endpoint"],
+                data=json.dumps(body).encode("utf-8"),
+                headers={
+                    "Authorization": f"Bearer {cfg['key']}",
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                },
+                method="POST",
+            )
+            with urlopen(req, timeout=35) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                msg = data["choices"][0]["message"]
+                answer_text = msg.get("content")
+                if not answer_text and msg.get("reasoning_content"):
+                    rc = msg["reasoning_content"]
+                    if "Output:" in rc:
+                        answer_text = rc.split("Output:")[-1].strip()
+                    elif "Draft:" in rc:
+                        answer_text = rc.split("Draft:")[-1].strip()
+
+                if answer_text and answer_text.strip():
+                    citations = [f["id"] for f in compact_evidence.get("findings", []) if f.get("id") and f["id"] in answer_text]
+                    return {
+                        "answer": answer_text.strip(),
+                        "provider": cfg["provider"],
+                        "model": cfg["model"],
+                        "citations": citations,
+                    }
+        except Exception as exc:
+            log.warning("AI provider failed in follow-up chat (%s), using grounded knowledge fallback", exc)
+
+    # Fallback to rich, intelligent cybersecurity knowledge base
+    fallback_text = _generate_knowledge_fallback(question_clean, evidence)
+    return {
+        "answer": fallback_text,
+        "provider": "threatlens_knowledge_engine",
+        "model": "grounded_rule_engine",
+        "citations": [f["id"] for f in evidence.get("findings", []) if f.get("id") and f["id"] in fallback_text],
+    }
 
 
 # ── Full Assessment Pipeline ───────────────────────────────────────────────

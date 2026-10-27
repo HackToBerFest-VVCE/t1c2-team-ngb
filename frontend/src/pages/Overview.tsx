@@ -33,7 +33,7 @@ import {
   YAxis,
 } from 'recharts';
 
-import { api, Metrics, SourceStatus, Vulnerability } from '../api';
+import { api, MLCoverage, Metrics, PaginatedResponse, SourceStatus, Vulnerability } from '../api';
 import {
   Badge,
   Card,
@@ -64,6 +64,11 @@ interface OverviewProps {
 export default function Overview({ source, onSelect }: OverviewProps) {
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [recent, setRecent] = useState<Vulnerability[]>([]);
+  const [mlCoverage, setMlCoverage] = useState<MLCoverage | null>(null);
+  const [reviewRows, setReviewRows] = useState<Vulnerability[]>([]);
+  const [reviewFilter, setReviewFilter] = useState<'needs_review' | 'high_unknown' | 'unscored'>('needs_review');
+  const [reviewSearch, setReviewSearch] = useState('');
+  const [reviewTotal, setReviewTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -71,10 +76,14 @@ export default function Overview({ source, onSelect }: OverviewProps) {
     setLoading(true);
     setError('');
 
-    api<{ metrics: Metrics; recent: Vulnerability[] }>('/summary')
-      .then((data) => {
+    Promise.all([
+      api<{ metrics: Metrics; recent: Vulnerability[] }>('/summary'),
+      api<{ coverage: MLCoverage }>('/ml/coverage?per_page=1').catch(() => null),
+    ])
+      .then(([data, coverage]) => {
         setMetrics(data.metrics);
         setRecent(data.recent ?? []);
+        setMlCoverage(coverage?.coverage ?? null);
       })
       .catch((err: Error) => {
         setError(err.message || 'Failed to load overview data');
@@ -88,6 +97,13 @@ export default function Overview({ source, onSelect }: OverviewProps) {
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams({ review: reviewFilter, q: reviewSearch.trim(), page: '1', per_page: '10', sort: 'cvss_score', order: 'desc' });
+    api<PaginatedResponse<Vulnerability>>(`/vulnerabilities?${params.toString()}`)
+      .then(data => { setReviewRows(data.items ?? []); setReviewTotal(data.total ?? 0); })
+      .catch(() => { setReviewRows([]); setReviewTotal(0); });
+  }, [reviewFilter, reviewSearch]);
 
   // Compute percentages safely
   const criticalPct = useMemo(() => {
@@ -167,7 +183,7 @@ export default function Overview({ source, onSelect }: OverviewProps) {
           <div className="metric-icon blue">
             <Activity size={20} />
           </div>
-          <small>RECORDS ANALYZED</small>
+          <small>RECORDS IN SCOPE</small>
           <strong>{metrics.total.toLocaleString()}</strong>
           <span>Normalized source vulnerabilities</span>
         </div>
@@ -203,6 +219,58 @@ export default function Overview({ source, onSelect }: OverviewProps) {
           <span>Rolling UTC publication window</span>
         </div>
       </div>
+
+      <Card
+        title="Risk & Coverage Review"
+        subtitle="Live source counts and current ML run. CVSS-indicated bands are review hints and never replace source severity."
+        action={<button className="text-action" onClick={() => onSelect('Vulnerability Explorer')}>Open review queue <ArrowUpRight size={14} /></button>}
+      >
+        <div className="metric-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
+          <div className="metric-card"><small>TOTAL ACTIVE RECORDS</small><strong>{mlCoverage?.total_active_records.toLocaleString() ?? metrics.total.toLocaleString()}</strong><span>Loaded, non-rejected source records</span></div>
+          <div className="metric-card"><small>ML-ELIGIBLE · NONEMPTY TEXT</small><strong>{mlCoverage?.eligible_records.toLocaleString() ?? 'Unavailable'}</strong><span>Eligible for TF-IDF models</span></div>
+          <div className="metric-card"><small>DETERMINISTIC ML SAMPLE</small><strong>{mlCoverage?.records_in_deterministic_sample.toLocaleString() ?? 'Unavailable'}</strong><span>Candidate sample in this run</span></div>
+          <div className="metric-card"><small>ML COVERAGE · ALL ACTIVE</small><strong>{mlCoverage ? `${mlCoverage.coverage_percent_of_active_records}%` : 'Unavailable'}</strong><span>Modeled records / all active records</span></div>
+          <div className="metric-card"><small>NOT ANALYZED BY ML</small><strong>{mlCoverage?.records_not_analyzed.toLocaleString() ?? 'Unavailable'}</strong><span>Not modeled; no safety inference</span></div>
+          <div className="metric-card"><small>UNKNOWN / MISSING SEVERITY</small><strong>{metrics.review?.unknown_source_severity?.toLocaleString() ?? '0'}</strong><span>Source label needs context</span></div>
+          <div className="metric-card"><small>EXPLICIT NONE SEVERITY</small><strong>{metrics.review?.explicit_none_severity?.toLocaleString() ?? '0'}</strong><span>Distinct from UNKNOWN</span></div>
+          <div className="metric-card"><small>UNKNOWN + CVSS ≥ 7</small><strong style={{ color: 'var(--red, #f27885)' }}>{metrics.review?.unknown_with_high_or_critical_cvss?.toLocaleString() ?? '0'}</strong><span>High/critical score-indicated band</span></div>
+          <div className="metric-card"><small>MISSING CVSS</small><strong>{metrics.review?.missing_cvss?.toLocaleString() ?? '0'}</strong><span>Unscored; needs evidence review</span></div>
+          <div className="metric-card"><small>SEVERITY + CVSS BOTH MISSING</small><strong>{metrics.review?.missing_severity_and_cvss?.toLocaleString() ?? '0'}</strong><span>Manual review; never assumed safe</span></div>
+          <div className="metric-card"><small>SEVERITY / CVSS CONFLICTS</small><strong>{metrics.review?.severity_score_mismatch?.toLocaleString() ?? '0'}</strong><span>Verify against source record</span></div>
+          <div className="metric-card"><small>INVALID CVSS RANGE</small><strong>{metrics.review?.invalid_cvss?.toLocaleString() ?? '0'}</strong><span>Source value needs verification</span></div>
+          <div className="metric-card"><small>RECORDS REQUIRING REVIEW</small><strong>{metrics.review?.needs_review?.toLocaleString() ?? '0'}</strong><span>Rule-based; no exploit probability</span></div>
+        </div>
+        {mlCoverage && <p className="limitation-footer">Coverage denominator: {mlCoverage.coverage_denominator}. {mlCoverage.partition_note}</p>}
+      </Card>
+
+      <Card title="Unknown-severity and data-quality queue" subtitle="Source values and derived CVSS bands stay separate. If advisory or affected-version evidence is unavailable, the record requires manual verification.">
+        <div className="filter-toolbar" style={{ marginBottom: 14 }}>
+          <input aria-label="Search review queue" className="search-input" placeholder="Search CVE, product, description…" value={reviewSearch} onChange={e => setReviewSearch(e.target.value)} />
+          <select aria-label="Review queue filter" value={reviewFilter} onChange={e => setReviewFilter(e.target.value as typeof reviewFilter)}>
+            <option value="needs_review">All records requiring review</option>
+            <option value="high_unknown">UNKNOWN severity + CVSS ≥ 7</option>
+            <option value="unscored">Missing CVSS</option>
+          </select>
+          <span>{reviewTotal.toLocaleString()} records</span>
+        </div>
+        <div className="table-wrap"><table>
+          <thead><tr><th>CVE</th><th>SOURCE SEVERITY</th><th>SOURCE CVSS</th><th>CVSS-INDICATED BAND</th><th>PUBLISHED</th><th>ML STATUS</th><th>REVIEW PRIORITY / REASON</th><th>AFFECTED-PRODUCT EVIDENCE</th><th>SOURCE</th></tr></thead>
+          <tbody>
+            {reviewRows.map(v => <tr key={v.record_id ?? v.cve_id}>
+              <td><a className="cve-link" href={v.source_url || `https://nvd.nist.gov/vuln/detail/${v.cve_id}`} target="_blank" rel="noreferrer">{v.cve_id}<ArrowUpRight size={12} /></a></td>
+              <td><SeverityBadge severity={v.severity} /></td>
+              <td>{v.cvss_score == null ? 'Unscored' : v.cvss_score.toFixed(1)}</td>
+              <td>{v.cvss_indicated_severity ?? 'No score-derived band'}</td>
+              <td>{v.published ? new Date(v.published).toLocaleDateString() : 'Not recorded'}</td>
+              <td>{v.ml_analysis_status ?? 'Not run / unavailable'}</td>
+              <td><b>{v.review_priority ?? 'Manual review'}</b><small className="row-desc">{v.review_reasons?.join('; ') || 'Verify source evidence'}</small></td>
+              <td><b>{v.affected_product_evidence || 'Product not listed'}</b><small className="row-desc">{v.affected_version_evidence || 'Version ranges unavailable in active schema; verify manually'}</small></td>
+              <td><a href={v.review_evidence_url || v.source_url || `https://nvd.nist.gov/vuln/detail/${v.cve_id}`} target="_blank" rel="noreferrer">NVD source <ExternalLink size={12} /></a><small className="row-desc">{v.advisory_evidence_status === 'NOT_QUERIED' ? 'Vendor advisory not queried' : 'Manual verification'}</small></td>
+            </tr>)}
+            {reviewRows.length === 0 && <tr><td colSpan={9}><div className="empty-row">No matching records, or the review queue is unavailable.</div></td></tr>}
+          </tbody>
+        </table></div>
+      </Card>
 
       {/* ── Primary Charts Grid ───────────────────────────────────── */}
       <div className="chart-grid">

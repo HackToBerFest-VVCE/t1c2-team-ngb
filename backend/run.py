@@ -16,4 +16,5 @@ if __name__ == '__main__':
     host = os.getenv('FLASK_HOST', '127.0.0.1')
     port = int(os.getenv('API_PORT', '5000'))
     debug = os.getenv('FLASK_DEBUG', 'true').lower() in ('true', '1', 'yes')
-    app.run(host=host, port=port, debug=debug, use_reloader=False)
+    reloader = os.getenv('FLASK_RELOAD', 'false').lower() in ('true', '1', 'yes')
+    app.run(host=host, port=port, debug=debug, use_reloader=reloader)

@@ -5,16 +5,35 @@ safe static file inspection, AI grounding, and export endpoints.
 """
 
 import json
+import sys
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 import pytest
-from backend.app.services.advisor import (
-    assess_software,
-    validate_safe_url,
-    inspect_file_safely,
-    match_version_against_ranges,
-    extract_potential_impacts,
-    answer_assessment_follow_up,
-)
+
+_backend_dir = Path(__file__).resolve().parents[1]
+_root_dir = _backend_dir.parent
+for p in (str(_root_dir), str(_backend_dir)):
+    if p not in sys.path:
+        sys.path.insert(0, p)
+
+try:
+    from app.services.advisor import (
+        assess_software,
+        validate_safe_url,
+        inspect_file_safely,
+        match_version_against_ranges,
+        extract_potential_impacts,
+        answer_assessment_follow_up,
+    )
+except ImportError:
+    from backend.app.services.advisor import (
+        assess_software,
+        validate_safe_url,
+        inspect_file_safely,
+        match_version_against_ranges,
+        extract_potential_impacts,
+        answer_assessment_follow_up,
+    )
 
 
 def test_url_security_safeguards():
@@ -131,8 +150,9 @@ def test_assessment_exact_package_match():
         }
     ]
 
-    with patch("backend.app.services.advisor.query_osv_package", return_value=mock_osv_vulns), \
-         patch("backend.app.services.advisor.search_local_vulnerabilities", return_value=[]):
+    _mod = assess_software.__module__
+    with patch(f"{_mod}.query_osv_package", return_value=mock_osv_vulns), \
+         patch(f"{_mod}.search_local_vulnerabilities", return_value=[]):
         res = assess_software(
             product_name="demo-pkg",
             version="1.2.0",
@@ -149,8 +169,9 @@ def test_assessment_exact_package_match():
 
 def test_assessment_no_vulnerabilities_found():
     """Test assessment when no CVEs or advisories are matched."""
-    with patch("backend.app.services.advisor.query_osv_package", return_value=[]), \
-         patch("backend.app.services.advisor.search_local_vulnerabilities", return_value=[]):
+    _mod = assess_software.__module__
+    with patch(f"{_mod}.query_osv_package", return_value=[]), \
+         patch(f"{_mod}.search_local_vulnerabilities", return_value=[]):
         res = assess_software(
             product_name="clean-library",
             version="3.0.0",

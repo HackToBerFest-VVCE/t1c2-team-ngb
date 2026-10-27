@@ -61,6 +61,11 @@ function formatUtcTime(value: string | null): string {
 export default function Explorer() {
   const [query, setQuery] = useState('');
   const [severity, setSeverity] = useState('');
+  const [review, setReview] = useState<VulnerabilityFilters['review']>(() => {
+    const initial = sessionStorage.getItem('threatlens-review-filter') as VulnerabilityFilters['review'];
+    sessionStorage.removeItem('threatlens-review-filter');
+    return initial;
+  });
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(15);
   const [fromDate, setFromDate] = useState('');
@@ -87,6 +92,7 @@ export default function Explorer() {
     min_score: minScore || undefined,
     max_score: maxScore || undefined,
     cwe: cwe.trim() || undefined,
+    review,
     sort,
     order,
   });
@@ -109,6 +115,7 @@ export default function Explorer() {
     if (filters.min_score) params.append('min_score', filters.min_score);
     if (filters.max_score) params.append('max_score', filters.max_score);
     if (filters.cwe) params.append('cwe', filters.cwe);
+    if (filters.review) params.append('review', filters.review);
     if (filters.sort) params.append('sort', filters.sort);
     if (filters.order) params.append('order', filters.order);
 
@@ -128,7 +135,15 @@ export default function Explorer() {
 
   useEffect(() => {
     loadVulnerabilities();
-  }, [query, severity, page, perPage, fromDate, toDate, minScore, maxScore, cwe, sort, order]);
+  }, [query, severity, review, page, perPage, fromDate, toDate, minScore, maxScore, cwe, sort, order]);
+
+  useEffect(() => {
+    if (review) {
+      setSort('cvss_score');
+      setOrder('desc');
+      setPage(1);
+    }
+  }, [review]);
 
   // Handle Search Input Change
   const handleSearchChange = (val: string) => {
@@ -174,7 +189,7 @@ export default function Explorer() {
   };
 
   const resetFilters = () => {
-    setQuery(''); setSeverity(''); setFromDate(''); setToDate('');
+    setQuery(''); setSeverity(''); setReview(undefined); setFromDate(''); setToDate('');
     setMinScore(''); setMaxScore(''); setCwe(''); setSort('severity'); setOrder('desc'); setPage(1);
   };
 
@@ -214,7 +229,7 @@ export default function Explorer() {
       {/* ── Main Explorer Card ────────────────────────────────────── */}
       <Card
         title="Record catalog"
-        subtitle="Rank by source severity and CVSS score, then filter by CVE, date, or weakness class"
+        subtitle="Source severity is preserved. CVSS-indicated severity is a review hint only; unscored records remain unscored."
       >
         {/* Search & Filter Toolbar */}
         <div className="filter-toolbar">
@@ -277,6 +292,15 @@ export default function Explorer() {
                 <option value="MEDIUM">Medium</option>
                 <option value="LOW">Low</option>
                 <option value="NONE">None</option>
+              </select>
+            </div>
+
+            <div className="select-wrap">
+              <select aria-label="Review queue" value={review ?? ''} onChange={e => { setPage(1); setReview((e.target.value || undefined) as VulnerabilityFilters['review']); }}>
+                <option value="">All review states</option>
+                <option value="needs_review">Needs review (missing or inconsistent data)</option>
+                <option value="high_unknown">Unknown severity + CVSS ≥ 7</option>
+                <option value="unscored">Missing CVSS score</option>
               </select>
             </div>
 
@@ -415,9 +439,13 @@ export default function Explorer() {
                         </small>
                       </td>
                       <td>
-                        {v.severity === 'UNKNOWN' && v.cvss_score == null ? (
-                          <Badge tone="gray" title="No CVSS score is present in the source record.">UNSCORED</Badge>
-                        ) : <SeverityBadge severity={v.severity} />}
+                        <div style={{ display: 'grid', gap: 4 }}>
+                          {v.severity === 'UNKNOWN' && v.cvss_score == null ? (
+                            <Badge tone="gray" title="No CVSS score is present in the source record.">UNKNOWN · UNSCORED</Badge>
+                          ) : <SeverityBadge severity={v.severity} />}
+                          {v.cvss_indicated_severity && v.severity === 'UNKNOWN' && <Badge tone={['HIGH', 'CRITICAL'].includes(v.cvss_indicated_severity) ? 'red' : 'blue'} title="Derived from the source CVSS score; it is not a source-reported severity.">CVSS INDICATES {v.cvss_indicated_severity}</Badge>}
+                          {!!v.review_reasons?.length && <small title={v.review_reasons.join('; ')} style={{ color: 'var(--text-muted)' }}>Review: {v.review_reasons.join('; ')}</small>}
+                        </div>
                       </td>
                       <td>
                         {v.cvss_score != null ? (
