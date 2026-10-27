@@ -599,49 +599,61 @@ def generate_grounded_ai_summary(evidence: dict[str, Any], provider_pref: str | 
 
 
 def answer_assessment_follow_up(
-    evidence: dict[str, Any], question: str, provider_pref: str | None = None
+    evidence: dict[str, Any] | None, question: str, provider_pref: str | None = None
 ) -> dict[str, Any]:
-    """Answer a user follow-up question strictly grounded in the assessment evidence."""
+    """Answer a user follow-up question strictly grounded in assessment evidence, or general cybersecurity Q&A."""
     if not question or not question.strip():
-        return {"answer": "Please ask a specific question regarding this software assessment.", "citations": []}
+        return {"answer": "Please ask a specific question regarding software security or vulnerability assessment.", "citations": []}
 
     cfg = _get_ai_credentials(provider_pref)
     if not cfg["key"]:
         return {
-            "answer": "AI provider is not configured. To enable interactive grounded Q&A, configure NVIDIA_API_KEY or DEEPSEEK_API_KEY in the backend environment.",
+            "answer": "AI provider is not configured. To enable interactive Q&A, configure NVIDIA_API_KEY or DEEPSEEK_API_KEY in the backend environment.",
             "citations": [],
         }
 
-    # Bounded evidence context
-    compact_evidence = {
-        "product": evidence.get("product_name"),
-        "version": evidence.get("version"),
-        "ecosystem": evidence.get("ecosystem"),
-        "verdict": evidence.get("verdict"),
-        "fixed_version": evidence.get("verified_fixed_version"),
-        "impacts": evidence.get("potential_impacts"),
-        "findings": [
-            {
-                "id": f.get("id"),
-                "severity": f.get("severity"),
-                "cvss_score": f.get("cvss_score"),
-                "fixed_version": f.get("verified_fixed_version"),
-                "summary": f.get("summary"),
-                "source_url": f.get("source_url"),
-            }
-            for f in evidence.get("findings", [])[:8]
-        ],
-    }
+    evidence = evidence or {}
+    has_findings = bool(evidence.get("findings"))
 
-    system_instruction = (
-        "You are ThreatLens AI Security Advisor answering follow-up questions about a specific software vulnerability assessment. "
-        "STRICT GROUNDING RULES:\n"
-        "1. Base your answer EXCLUSIVELY on the provided assessment evidence JSON.\n"
-        "2. Do not invent any CVE numbers, CVSS scores, exploit payloads, or hypothetical vulnerabilities not in evidence.\n"
-        "3. If the answer cannot be determined from the evidence, state clearly: 'The current vulnerability evidence does not contain this information.'\n"
-        "4. Always mention the specific CVE or OSV ID when referencing findings.\n"
-        "5. Keep responses concise, objective, and actionable."
-    )
+    if has_findings:
+        compact_evidence = {
+            "product": evidence.get("product_name") or evidence.get("software", {}).get("product_name"),
+            "version": evidence.get("version") or evidence.get("software", {}).get("version"),
+            "ecosystem": evidence.get("ecosystem") or evidence.get("software", {}).get("ecosystem"),
+            "verdict": evidence.get("verdict"),
+            "fixed_version": evidence.get("verified_fixed_version"),
+            "impacts": evidence.get("potential_impacts"),
+            "findings": [
+                {
+                    "id": f.get("id"),
+                    "severity": f.get("severity"),
+                    "cvss_score": f.get("cvss_score"),
+                    "fixed_version": f.get("verified_fixed_version"),
+                    "summary": f.get("summary"),
+                    "source_url": f.get("source_url"),
+                }
+                for f in evidence.get("findings", [])[:8]
+            ],
+        }
+
+        system_instruction = (
+            "You are ThreatLens AI Security Advisor answering follow-up questions about a specific software vulnerability assessment. "
+            "STRICT GROUNDING RULES:\n"
+            "1. Base your answer EXCLUSIVELY on the provided assessment evidence JSON.\n"
+            "2. Do not invent any CVE numbers, CVSS scores, exploit payloads, or hypothetical vulnerabilities not in evidence.\n"
+            "3. If the answer cannot be determined from the evidence, state clearly: 'The current vulnerability evidence does not contain this information.'\n"
+            "4. Always mention the specific CVE or OSV ID when referencing findings.\n"
+            "5. Keep responses concise, objective, and actionable."
+        )
+        user_content = f"Assessment Evidence:\n{json.dumps(compact_evidence)}\n\nUser Question: {question.strip()}"
+    else:
+        system_instruction = (
+            "You are ThreatLens AI Software Safety Advisor, an authoritative cybersecurity expert. "
+            "Help the user understand software vulnerabilities, common weaknesses, package security best practices, "
+            "and CVE remediation in plain English. State practical guidance and advise verification against official vendor advisories."
+        )
+        user_content = question.strip()
+        compact_evidence = {"findings": []}
 
     body = {
         "model": cfg["model"],

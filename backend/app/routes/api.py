@@ -1116,8 +1116,8 @@ def software_assessment_chat():
     if not evidence and assessment_id:
         evidence = get_cached_assessment(assessment_id)
 
-    if not evidence:
-        return _error("assessment_not_found", "No assessment context found. Please run an assessment first.", 404)
+    if evidence is None:
+        evidence = {}
 
     if not question or not str(question).strip():
         return _error("invalid_question", "Question cannot be empty.", 400)

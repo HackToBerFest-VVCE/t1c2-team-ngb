@@ -165,14 +165,19 @@ export default function Advisor() {
 
   const handleAskQuestion = async (questionText?: string) => {
     const q = (questionText || chatQuestion).trim();
-    if (!q || !assessment) return;
+    if (!q) return;
 
     setChatMessages(prev => [...prev, { sender: 'user', text: q }]);
     setChatQuestion('');
     setChatLoading(true);
 
     try {
-      const resp = await askAdvisorQuestion(assessment.assessment_id, q, assessment, provider);
+      const resp = await askAdvisorQuestion(
+        assessment ? assessment.assessment_id : '',
+        q,
+        assessment || undefined,
+        provider
+      );
       setChatMessages(prev => [
         ...prev,
         {
@@ -839,110 +844,6 @@ Verified Fixed Version: ${assessment.verified_fixed_version || 'None specified'}
             )}
           </Card>
 
-          {/* Interactive AI Grounded Follow-Up Chat */}
-          <Card>
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <div className="flex items-center gap-2">
-                <Terminal className="w-4 h-4 text-sky-400" />
-                <h4 className="text-sm font-semibold text-slate-100">
-                  Ask AI About This Assessment
-                </h4>
-              </div>
-              <span className="text-[11px] text-slate-500">
-                Grounded strictly in current findings evidence
-              </span>
-            </div>
-
-            {/* Quick Suggested Questions */}
-            <div className="flex flex-wrap gap-2 mt-3">
-              {[
-                'Explain the highest severity vulnerability in simple English.',
-                'Why is this specific version affected?',
-                'Which fixed version is supported by the vendor advisory?',
-                'What should our administrator verify before installation?',
-              ].map((q, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => handleAskQuestion(q)}
-                  className="px-2.5 py-1 rounded bg-slate-900 border border-slate-800 hover:border-sky-500/50 text-[11px] text-slate-300 hover:text-white transition-colors"
-                >
-                  {q}
-                </button>
-              ))}
-            </div>
-
-            {/* Chat Messages Thread */}
-            <div className="mt-4 space-y-3 max-h-80 overflow-y-auto pr-2">
-              {chatMessages.length === 0 ? (
-                <div className="py-6 text-center text-xs text-slate-500">
-                  Have questions about this software assessment? Type below or pick a suggested question above.
-                </div>
-              ) : (
-                chatMessages.map((msg, i) => (
-                  <div
-                    key={i}
-                    className={`flex flex-col ${
-                      msg.sender === 'user' ? 'items-end' : 'items-start'
-                    }`}
-                  >
-                    <div
-                      className={`max-w-2xl px-3.5 py-2.5 rounded-xl text-xs leading-relaxed ${
-                        msg.sender === 'user'
-                          ? 'bg-sky-600 text-white'
-                          : 'bg-slate-900 border border-slate-800 text-slate-200'
-                      }`}
-                    >
-                      {msg.text}
-                      {msg.citations && msg.citations.length > 0 && (
-                        <div className="mt-2 pt-2 border-t border-slate-800 text-[10px] text-sky-400 flex items-center gap-1">
-                          <span>Citations:</span>
-                          {msg.citations.map((c, ci) => (
-                            <span key={ci} className="font-mono bg-slate-800 px-1 py-0.5 rounded">
-                              {c}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))
-              )}
-              {chatLoading && (
-                <div className="flex items-center gap-2 text-xs text-slate-400 italic">
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-sky-400" />
-                  Generating grounded answer from assessment records...
-                </div>
-              )}
-            </div>
-
-            {/* Chat Input */}
-            <div className="mt-4 flex items-center gap-2">
-              <input
-                type="text"
-                value={chatQuestion}
-                onChange={e => setChatQuestion(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleAskQuestion();
-                  }
-                }}
-                placeholder="Ask a question about these vulnerabilities..."
-                className="flex-1 px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-sky-500 transition-colors"
-              />
-              <button
-                type="button"
-                onClick={() => handleAskQuestion()}
-                disabled={chatLoading || !chatQuestion.trim()}
-                className="px-4 py-2 bg-sky-600 hover:bg-sky-500 disabled:bg-slate-800 disabled:text-slate-600 text-white font-medium text-xs rounded-lg transition-colors flex items-center gap-1.5"
-              >
-                <Send className="w-3.5 h-3.5" />
-                Ask
-              </button>
-            </div>
-          </Card>
-
           {/* Sources Checked & Limitations Disclaimer */}
           <Card>
             <div className="flex items-center gap-2 mb-2">
@@ -972,6 +873,126 @@ Verified Fixed Version: ${assessment.verified_fixed_version || 'None specified'}
           </Card>
         </div>
       )}
+
+      {/* ── Interactive AI Grounded Software Security Chat (Always Visible) ── */}
+      <Card>
+        <div className="flex flex-wrap items-center justify-between pb-3 border-b border-slate-800 gap-2">
+          <div className="flex items-center gap-2">
+            <Terminal className="w-4 h-4 text-sky-400" />
+            <h4 className="text-sm font-semibold text-slate-100">
+              {assessment ? 'Ask AI About This Assessment' : 'AI Software Security Assistant & Chat'}
+            </h4>
+          </div>
+          <span className="text-[11px] text-slate-400 font-mono bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+            {assessment
+              ? `Context: ${assessment.software.product_name} (${assessment.total_findings} findings)`
+              : `Provider: ${provider.toUpperCase()}`}
+          </span>
+        </div>
+
+        {/* Quick Suggested Questions */}
+        <div className="flex flex-wrap gap-2 mt-3">
+          {(assessment
+            ? [
+                'Explain the highest severity vulnerability in simple English.',
+                'Why is this specific version affected?',
+                'Which fixed version is supported by the vendor advisory?',
+                'What should our administrator verify before installation?',
+              ]
+            : [
+                'What are the security risks of OpenSSL 3.0.0?',
+                'How do I check if my package has known CVEs?',
+                'What does CVSS score 9.8 mean?',
+                'What should our team verify before installing a third-party package?',
+              ]
+          ).map((q, idx) => (
+            <button
+              key={idx}
+              type="button"
+              onClick={() => handleAskQuestion(q)}
+              className="px-2.5 py-1 rounded bg-slate-900 border border-slate-800 hover:border-sky-500/50 text-[11px] text-slate-300 hover:text-white transition-colors"
+            >
+              {q}
+            </button>
+          ))}
+        </div>
+
+        {/* Chat Messages Thread */}
+        <div className="mt-4 space-y-3 max-h-80 overflow-y-auto pr-2">
+          {chatMessages.length === 0 ? (
+            <div className="py-6 text-center text-xs text-slate-500">
+              {assessment
+                ? 'Have questions about this software assessment? Type below or pick a suggested question above.'
+                : 'Ask questions about any software package, CVE, or security practice, or run an assessment above to ground the analysis.'}
+            </div>
+          ) : (
+            chatMessages.map((msg, i) => (
+              <div
+                key={i}
+                className={`flex flex-col ${
+                  msg.sender === 'user' ? 'items-end' : 'items-start'
+                }`}
+              >
+                <div
+                  className={`max-w-2xl px-3.5 py-2.5 rounded-xl text-xs leading-relaxed ${
+                    msg.sender === 'user'
+                      ? 'bg-sky-600 text-white'
+                      : 'bg-slate-900 border border-slate-800 text-slate-200'
+                  }`}
+                >
+                  {msg.text}
+                  {msg.citations && msg.citations.length > 0 && (
+                    <div className="mt-2 pt-2 border-t border-slate-800 text-[10px] text-sky-400 flex items-center gap-1">
+                      <span>Citations:</span>
+                      {msg.citations.map((c, ci) => (
+                        <span key={ci} className="font-mono bg-slate-800 px-1 py-0.5 rounded">
+                          {c}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))
+          )}
+          {chatLoading && (
+            <div className="flex items-center gap-2 text-xs text-slate-400 italic">
+              <RefreshCw className="w-3.5 h-3.5 animate-spin text-sky-400" />
+              Generating grounded answer...
+            </div>
+          )}
+        </div>
+
+        {/* Chat Input */}
+        <div className="mt-4 flex items-center gap-2">
+          <input
+            type="text"
+            value={chatQuestion}
+            onChange={e => setChatQuestion(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleAskQuestion();
+              }
+            }}
+            placeholder={
+              assessment
+                ? 'Ask a question about these vulnerabilities...'
+                : 'Ask about any vulnerability, CVE, or package security risk...'
+            }
+            className="flex-1 px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-sky-500 transition-colors"
+          />
+          <button
+            type="button"
+            onClick={() => handleAskQuestion()}
+            disabled={chatLoading || !chatQuestion.trim()}
+            className="px-4 py-2 bg-sky-600 hover:bg-sky-500 disabled:bg-slate-800 disabled:text-slate-600 text-white font-medium text-xs rounded-lg transition-colors flex items-center gap-1.5"
+          >
+            <Send className="w-3.5 h-3.5" />
+            Ask
+          </button>
+        </div>
+      </Card>
     </div>
   );
 }
