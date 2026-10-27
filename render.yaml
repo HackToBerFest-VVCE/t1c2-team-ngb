@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: threatlens-ai
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+    envVars:
+      - key: DATA_SOURCE
+        value: demo
+      - key: AI_PROVIDER
+        value: nvidia

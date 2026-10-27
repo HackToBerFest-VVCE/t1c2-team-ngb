@@ -1,0 +1,13 @@
+{
+  "provider": "NIST National Vulnerability Database (NVD)",
+  "api": "https://services.nvd.nist.gov/rest/json/cves/2.0",
+  "retrieved_at": "2026-10-23T15:35:47Z",
+  "response_total_results": 713,
+  "bundled_records": 30,
+  "bundled_published_range": {
+    "latest": "2026-10-20T23:17:17.050Z",
+    "earliest": "2026-10-20T22:21:04.900Z"
+  },
+  "selection": "30 records selected from the captured NVD response, ordered by published timestamp descending",
+  "live_snowflake": false
+}

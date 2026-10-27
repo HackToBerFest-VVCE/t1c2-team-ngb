@@ -1,0 +1,16 @@
+-- Run in a database and schema where the executing role can create objects.
+-- TPC-H/TPC-DS sample datasets are not cybersecurity sources and cannot be
+-- substituted for CVE records. This canonical table stores normalized NVD data.
+CREATE TABLE IF NOT EXISTS THREATLENS.VULNERABILITIES (
+  CVE_ID VARCHAR NOT NULL,
+  DESCRIPTION VARCHAR,
+  PUBLISHED TIMESTAMP_TZ,
+  LAST_MODIFIED TIMESTAMP_TZ,
+  CVSS_SCORE FLOAT,
+  SEVERITY VARCHAR,
+  CWE VARCHAR,
+  AFFECTED_PRODUCTS VARCHAR,
+  SOURCE_URL VARCHAR,
+  INGESTED_AT TIMESTAMP_TZ DEFAULT CURRENT_TIMESTAMP(),
+  CONSTRAINT PK_VULNERABILITIES PRIMARY KEY (CVE_ID)
+);
