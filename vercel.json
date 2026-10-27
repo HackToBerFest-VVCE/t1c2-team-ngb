@@ -20,7 +20,7 @@
   "functions": {
     "api/index.py": {
       "maxDuration": 60,
-      "includeFiles": "{backend/**,data/**}",
+      "includeFiles": "{backend/app/**,data/vulnerabilities.json,data/models/**}",
       "excludeFiles": "{.env,.env.*,**/.env,**/.env.*,**/tests/**,**/*.test.*,**/node_modules/**,**/.venv/**,data/external/**,data/vulnerabilities.full.json,data/vulnerabilities.full.json.gz,data/vulnerabilities.full.parquet}"
     }
   }
