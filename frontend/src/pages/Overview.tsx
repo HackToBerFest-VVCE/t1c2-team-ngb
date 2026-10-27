@@ -365,12 +365,15 @@ export default function Overview({ source, onSelect }: OverviewProps) {
                   </Pie>
                   <Tooltip
                     contentStyle={{
-                      background: '#151c28',
+                      backgroundColor: '#151c28',
                       border: '1px solid #2a3545',
                       borderRadius: 8,
                       color: '#e7ebf3',
                       fontSize: 12,
+                      padding: '8px 10px',
                     }}
+                    itemStyle={{ color: '#e7ebf3', fontWeight: 600 }}
+                    labelStyle={{ color: '#aebbd0' }}
                     formatter={(val: any) => [Number(val).toLocaleString(), 'Count']}
                   />
                 </PieChart>
